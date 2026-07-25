@@ -1,0 +1,569 @@
+// ---------------------------------------------------------------------------
+// ToptanPortal - Veritabani Semasi (PostgreSQL 16)
+//
+// Tasarim kararlari:
+//  * Multi-tenant: tek toptanci = tek Tenant. Tum tablolarda tenantId tasinir,
+//    boylece ileride ayni kurulum uzerinde birden fazla toptanci barinabilir.
+//  * Kisisel veri (telefon, TCKN) AES-256-GCM ile sifreli tutulur (*_enc alanlari),
+//    arama icin HMAC-SHA256 blind index (*_idx) kullanilir. KVKK Md.12.
+//  * AuditLog append-only'dir; UPDATE/DELETE veritabani trigger'i ile engellenir.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enum'lar
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  SUPER_ADMIN
+  SALES_REP
+  BUSINESS_OWNER
+  BUSINESS_STAFF
+  BUSINESS_ACCOUNTANT
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  LOCKED
+}
+
+enum MfaMethod {
+  TOTP
+  SMS
+}
+
+enum ClientPlatform {
+  WEB
+  IOS
+  ANDROID
+}
+
+enum ConsentType {
+  KVKK_CLARIFICATION
+  KVKK_EXPLICIT_CONSENT
+  IYS_SMS
+  IYS_EMAIL
+  IYS_CALL
+}
+
+enum ConsentSource {
+  WEB
+  IOS
+  SALES_REP
+  MIGRATION
+}
+
+enum IysSyncStatus {
+  NOT_REQUIRED
+  PENDING
+  SYNCED
+  FAILED
+}
+
+enum AuditActorType {
+  USER
+  SYSTEM
+  INTEGRATION
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  DEAD
+}
+
+enum LoginFailureReason {
+  UNKNOWN_EMAIL
+  BAD_PASSWORD
+  ACCOUNT_LOCKED
+  ACCOUNT_SUSPENDED
+  ACCOUNT_INVITED
+  IP_NOT_WHITELISTED
+  MFA_FAILED
+  RATE_LIMITED
+}
+
+// ---------------------------------------------------------------------------
+// Kiracı (Toptanci) ve Isletme (Logo Cari)
+// ---------------------------------------------------------------------------
+
+model Tenant {
+  id           String   @id @default(uuid()) @db.Uuid
+  code         String   @unique @db.VarChar(32)
+  title        String   @db.VarChar(200)
+  taxNumber    String?  @db.VarChar(11)
+  logoFirmNo   Int      @default(1)
+  logoPeriodNo Int      @default(1)
+  timezone     String   @default("Europe/Istanbul") @db.VarChar(64)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  companies        Company[]
+  users            User[]
+  auditLogs        AuditLog[]
+  auditChainHead   AuditChainHead?
+  ipWhitelist      AdminIpWhitelist[]
+  consentRecords   ConsentRecord[]
+  outboxEvents     OutboxEvent[]
+  idempotencyKeys  IdempotencyKey[]
+  loginAttempts    LoginAttempt[]
+
+  @@map("tenants")
+}
+
+/// Bayi / kafe / otel. Logo tarafindaki CLCARD kaydinin portal karsiligi.
+model Company {
+  id        String @id @default(uuid()) @db.Uuid
+  tenantId  String @db.Uuid
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Logo cari kodu (CLCARD.CODE) - senkronizasyonun anahtari
+  logoCariCode String @db.VarChar(32)
+  /// Logo cari kart LOGICALREF - hizli join icin
+  logoCariRef  Int?
+
+  title      String  @db.VarChar(200)
+  shortName  String? @db.VarChar(80)
+  taxNumber  String? @db.VarChar(11)
+  taxOffice  String? @db.VarChar(80)
+  /// e-Fatura mukellef kontrolu icin GLN / VKN-TCKN etiketi
+  gibIdentifier String? @db.VarChar(20)
+  isEInvoiceUser Boolean @default(false)
+
+  phone   String? @db.VarChar(24)
+  email   String? @db.VarChar(254)
+  city    String? @db.VarChar(64)
+  district String? @db.VarChar(64)
+  address String? @db.VarChar(500)
+  latitude  Decimal? @db.Decimal(9, 6)
+  longitude Decimal? @db.Decimal(9, 6)
+
+  /// Logo'da tanimli ozel fiyat listesi numarasi. Null ise genel liste gecerlidir.
+  logoPriceListNo Int?
+  /// Varsayilan sevk ambari (Logo ambar no)
+  defaultWarehouseNo Int @default(0)
+  /// Portal tarafinda cache'lenen risk verisi. Otorite Logo'dur; siparis aninda
+  /// canli sorgulanir. Buradaki degerler yalnizca UI on-uyarisi icindir.
+  creditLimit        Decimal  @default(0) @db.Decimal(18, 4)
+  cachedBalance      Decimal  @default(0) @db.Decimal(18, 4)
+  cachedOverdueAmount Decimal @default(0) @db.Decimal(18, 4)
+  cachedOverdueDays  Int      @default(0)
+  riskDataSyncedAt   DateTime? @db.Timestamptz(6)
+
+  /// Manuel blokaj. Logo risk kontrolunden bagimsiz olarak admin kilidi.
+  isBlocked       Boolean @default(false)
+  blockReason     String? @db.VarChar(280)
+  paymentTermDays Int     @default(0)
+  isActive        Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  users            User[]
+  salesRepLinks    SalesRepAssignment[]
+  consentRecords   ConsentRecord[]
+
+  @@unique([tenantId, logoCariCode])
+  @@index([tenantId, isActive])
+  @@index([tenantId, city])
+  @@map("companies")
+}
+
+// ---------------------------------------------------------------------------
+// Kullanici ve Yetki
+// ---------------------------------------------------------------------------
+
+model User {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// SUPER_ADMIN ve SALES_REP icin null; isletme rolleri icin zorunlu.
+  /// Zorunluluk uygulama katmaninda ve CHECK constraint ile denetlenir.
+  companyId String?  @db.Uuid
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  email          String @db.VarChar(254)
+  /// Kucuk harfe indirgenmis, benzersizlik ve arama icin
+  emailNormalized String @db.VarChar(254)
+  fullName       String @db.VarChar(120)
+
+  /// KVKK: telefon at-rest sifreli. phoneIdx = HMAC-SHA256(telefon) - arama icin.
+  phoneEnc String? @db.Text
+  phoneIdx String? @db.Char(64)
+
+  /// Argon2id
+  passwordHash        String    @db.Text
+  passwordChangedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  mustChangePassword  Boolean   @default(false)
+
+  role   UserRole
+  status UserStatus @default(INVITED)
+
+  /// Rol geregi 2FA zorunluysa true. Kullanici bazinda ek zorunluluk da atanabilir.
+  mfaRequired  Boolean    @default(false)
+  mfaMethod    MfaMethod?
+  /// TOTP secret'i AES-256-GCM ile sifreli
+  mfaSecretEnc String?    @db.Text
+  mfaEnrolledAt DateTime? @db.Timestamptz(6)
+
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime? @db.Timestamptz(6)
+  lastLoginAt      DateTime? @db.Timestamptz(6)
+  lastLoginIp      String?   @db.VarChar(45)
+  lastLoginCity    String?   @db.VarChar(64)
+
+  createdByUserId String? @db.Uuid
+  createdBy       User?   @relation("UserCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdUsers    User[]  @relation("UserCreatedBy")
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  sessions          Session[]
+  trustedDevices    TrustedDevice[]
+  recoveryCodes     MfaRecoveryCode[]
+  spendingLimit     UserSpendingLimit?
+  salesRepAssignments SalesRepAssignment[]
+  consentRecords    ConsentRecord[]
+
+  @@unique([tenantId, emailNormalized])
+  @@index([tenantId, role, status])
+  @@index([companyId, status])
+  @@index([tenantId, phoneIdx])
+  @@map("users")
+}
+
+/// Isletme ana yetkilisinin alt kullanicilarina tanimladigi harcama limitleri.
+/// Alt kullanici tutari GORMEZ; limit yalnizca sunucu tarafinda uygulanir ve
+/// asildiginda siparis "onay bekliyor" durumuna duser.
+model UserSpendingLimit {
+  userId String @id @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Null = limitsiz
+  perOrderLimit Decimal? @db.Decimal(18, 4)
+  dailyLimit    Decimal? @db.Decimal(18, 4)
+  monthlyLimit  Decimal? @db.Decimal(18, 4)
+  /// true ise tutar ne olursa olsun ana yetkili onayi gerekir
+  alwaysRequiresApproval Boolean @default(true)
+
+  updatedByUserId String?  @db.Uuid
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("user_spending_limits")
+}
+
+/// Plasiyer <-> Bayi atamasi. Plasiyer yalnizca burada eslesen carileri gorur.
+model SalesRepAssignment {
+  id String @id @default(uuid()) @db.Uuid
+
+  salesRepUserId String @db.Uuid
+  salesRep       User   @relation(fields: [salesRepUserId], references: [id], onDelete: Cascade)
+
+  companyId String  @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  isActive   Boolean   @default(true)
+  assignedAt DateTime  @default(now()) @db.Timestamptz(6)
+  revokedAt  DateTime? @db.Timestamptz(6)
+
+  @@unique([salesRepUserId, companyId])
+  @@index([companyId, isActive])
+  @@map("sales_rep_assignments")
+}
+
+// ---------------------------------------------------------------------------
+// Oturum Yonetimi
+// ---------------------------------------------------------------------------
+
+/// Refresh token kaydi. Token'in kendisi ASLA saklanmaz; SHA-256 ozeti tutulur.
+/// Rotasyon: her yenilemede yeni kayit acilir, eskisi replacedById ile isaretlenir.
+/// Kullanilmis bir token tekrar gelirse (reuse) tum aile iptal edilir.
+model Session {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// JWT access token'lardaki `sid` claim'i bu kaydi isaret eder.
+  refreshTokenHash String @unique @db.Char(64)
+  /// Ayni login zincirindeki tum oturumlarin ortak kimligi (reuse tespiti icin)
+  familyId String @db.Uuid
+
+  deviceIdHash String         @db.Char(64)
+  deviceName   String         @db.VarChar(80)
+  platform     ClientPlatform
+  appVersion   String?        @db.VarChar(32)
+
+  ip        String  @db.VarChar(45)
+  userAgent String? @db.VarChar(512)
+
+  /// Plasiyer bayi yerine geciyorsa (masquerading) hedef cari
+  masqueradeCompanyId String?   @db.Uuid
+  masqueradeStartedAt DateTime? @db.Timestamptz(6)
+  masqueradeReason    String?   @db.VarChar(280)
+
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  lastUsedAt     DateTime  @default(now()) @db.Timestamptz(6)
+  expiresAt      DateTime  @db.Timestamptz(6)
+  revokedAt      DateTime? @db.Timestamptz(6)
+  revokedReason  String?   @db.VarChar(120)
+  replacedBySessionId String? @db.Uuid
+
+  @@index([userId, revokedAt])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+/// 2FA "bu cihazi hatirla" kaydi. Guvenilir cihazda TOTP tekrar sorulmaz.
+model TrustedDevice {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  deviceIdHash String         @db.Char(64)
+  deviceName   String         @db.VarChar(80)
+  platform     ClientPlatform
+
+  trustedUntil DateTime  @db.Timestamptz(6)
+  lastSeenAt   DateTime  @default(now()) @db.Timestamptz(6)
+  lastSeenIp   String?   @db.VarChar(45)
+  revokedAt    DateTime? @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@unique([userId, deviceIdHash])
+  @@map("trusted_devices")
+}
+
+/// TOTP kurtarma kodlari. Kodun kendisi saklanmaz; Argon2id ozeti tutulur.
+model MfaRecoveryCode {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  codeHash String    @db.Text
+  usedAt   DateTime? @db.Timestamptz(6)
+  usedIp   String?   @db.VarChar(45)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([userId, usedAt])
+  @@map("mfa_recovery_codes")
+}
+
+/// Giris denemeleri - adli inceleme ve supheli erisim tespiti icin.
+model LoginAttempt {
+  id       BigInt  @id @default(autoincrement())
+  tenantId String? @db.Uuid
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  emailNormalized String              @db.VarChar(254)
+  userId          String?             @db.Uuid
+  success         Boolean
+  failureReason   LoginFailureReason?
+
+  ip        String  @db.VarChar(45)
+  userAgent String? @db.VarChar(512)
+  /// Cloudflare CF-IPCountry / CF-IPCity basliklarindan
+  country   String? @db.VarChar(2)
+  city      String? @db.VarChar(64)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([emailNormalized, createdAt])
+  @@index([ip, createdAt])
+  @@index([createdAt])
+  @@map("login_attempts")
+}
+
+/// Super Admin IP beyaz listesi. CIDR notasyonu (ornek: 88.240.10.0/24).
+model AdminIpWhitelist {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  cidr        String   @db.VarChar(45)
+  label       String   @db.VarChar(120)
+  isActive    Boolean  @default(true)
+  /// Null = suresiz. Gecici erisim icin tarih verilebilir.
+  expiresAt   DateTime? @db.Timestamptz(6)
+  createdByUserId String? @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([tenantId, cidr])
+  @@index([tenantId, isActive])
+  @@map("admin_ip_whitelist")
+}
+
+// ---------------------------------------------------------------------------
+// Yasal Delil Loglamasi (5651 / 5070) - APPEND ONLY
+// ---------------------------------------------------------------------------
+
+/// Zincirin son halkasi. Yeni kayit eklenirken bu satir advisory lock ile
+/// kilitlenir, boylece es zamanli yazimlarda sira numarasi ve hash butunlugu bozulmaz.
+model AuditChainHead {
+  tenantId String @id @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  lastSeq  BigInt   @default(0)
+  lastHash String   @default("0000000000000000000000000000000000000000000000000000000000000000") @db.Char(64)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("audit_chain_head")
+}
+
+model AuditLog {
+  id       BigInt @id @default(autoincrement())
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  /// Kiraci icindeki bosluksuz sira numarasi. Bosluk = silinmis kayit demektir.
+  seq BigInt
+
+  /// Olayin gerceklestigi an (mikrosaniye hassasiyetinde)
+  occurredAt DateTime @db.Timestamptz(6)
+  /// Kaydin veritabanina yazildigi an
+  recordedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  actorType   AuditActorType @default(USER)
+  actorUserId String?        @db.Uuid
+  actorRole   UserRole?
+  actorEmail  String?        @db.VarChar(254)
+  /// Plasiyer bayi adina islem yapiyorsa hedef cari burada tutulur.
+  onBehalfOfCompanyId String? @db.Uuid
+  companyId           String? @db.Uuid
+
+  action       String  @db.VarChar(80)
+  resourceType String? @db.VarChar(60)
+  resourceId   String? @db.VarChar(64)
+  outcome      String  @default("SUCCESS") @db.VarChar(16)
+
+  ip        String? @db.VarChar(45)
+  userAgent String? @db.VarChar(512)
+  requestId String? @db.VarChar(64)
+  sessionId String? @db.Uuid
+
+  /// Olaya ozel veri. Kart numarasi, sifre, TOTP secret ASLA yazilmaz.
+  payload Json @default("{}")
+
+  prevHash String @db.Char(64)
+  hash     String @db.Char(64)
+
+  @@unique([tenantId, seq])
+  @@index([tenantId, occurredAt])
+  @@index([tenantId, action, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@index([companyId, occurredAt])
+  @@index([resourceType, resourceId])
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Mevzuat: KVKK aydinlatma / acik riza ve IYS izinleri
+// ---------------------------------------------------------------------------
+
+model ConsentRecord {
+  id       BigInt @id @default(autoincrement())
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  companyId String?  @db.Uuid
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  type    ConsentType
+  granted Boolean
+  source  ConsentSource
+
+  /// Onaylanan metnin surumu - hangi metne onay verildigi ispatlanabilir olmali
+  documentVersion String @db.VarChar(32)
+  documentHash    String @db.Char(64)
+
+  ip        String? @db.VarChar(45)
+  userAgent String? @db.VarChar(512)
+
+  /// IYS (Ileti Yonetim Sistemi) senkronizasyon durumu - 6563 sayili Kanun
+  iysStatus   IysSyncStatus @default(NOT_REQUIRED)
+  iysSyncedAt DateTime?     @db.Timestamptz(6)
+  iysError    String?       @db.VarChar(500)
+  /// IYS'ye bildirilen alici adresi (telefon/e-posta)
+  iysRecipient String?      @db.VarChar(254)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([userId, type, createdAt])
+  @@index([tenantId, iysStatus])
+  @@map("consent_records")
+}
+
+// ---------------------------------------------------------------------------
+// Entegrasyon Altyapisi
+// ---------------------------------------------------------------------------
+
+/// Transactional Outbox. Logo sunucusu bakimda olsa dahi portal siparis almaya
+/// devam eder; olaylar buraya yazilir, worker kuyruktan tuketip Logo'ya iletir.
+model OutboxEvent {
+  id       BigInt @id @default(autoincrement())
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  aggregateType String @db.VarChar(60)
+  aggregateId   String @db.VarChar(64)
+  eventType     String @db.VarChar(80)
+  payload       Json
+
+  status        OutboxStatus @default(PENDING)
+  attempts      Int          @default(0)
+  maxAttempts   Int          @default(12)
+  nextAttemptAt DateTime     @default(now()) @db.Timestamptz(6)
+  lastError     String?      @db.VarChar(1000)
+  lockedBy      String?      @db.VarChar(64)
+  lockedAt      DateTime?    @db.Timestamptz(6)
+
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  processedAt DateTime? @db.Timestamptz(6)
+
+  @@index([status, nextAttemptAt])
+  @@index([aggregateType, aggregateId])
+  @@map("outbox_events")
+}
+
+/// Idempotency-Key destegi. Zayif mobil baglantida tekrarlanan POST istekleri
+/// ayni siparisi iki kez olusturmamalidir.
+model IdempotencyKey {
+  key      String @id @db.VarChar(120)
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  userId       String  @db.Uuid
+  endpoint     String  @db.VarChar(200)
+  requestHash  String  @db.Char(64)
+  responseCode Int?
+  responseBody Json?
+  /// Islem devam ederken ayni anahtarla gelen ikinci istek beklemeye alinir.
+  completedAt  DateTime? @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  expiresAt    DateTime  @db.Timestamptz(6)
+
+  @@index([expiresAt])
+  @@index([userId, endpoint])
+  @@map("idempotency_keys")
+}

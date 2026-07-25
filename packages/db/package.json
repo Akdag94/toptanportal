@@ -1,0 +1,33 @@
+{
+  "name": "@toptanportal/db",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Prisma semasi, istemci ve veritabani sertlestirme betikleri",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "prisma"],
+  "scripts": {
+    "generate": "prisma generate",
+    "build": "prisma generate && tsc -p tsconfig.json",
+    "migrate:dev": "prisma migrate dev && pnpm harden",
+    "migrate:deploy": "prisma migrate deploy && pnpm harden",
+    "harden": "ts-node --transpile-only src/scripts/harden.ts",
+    "verify-audit": "ts-node --transpile-only src/scripts/verify-audit-chain.ts",
+    "seed": "ts-node --transpile-only prisma/seed.ts",
+    "studio": "prisma studio"
+  },
+  "prisma": {
+    "seed": "ts-node --transpile-only prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "5.20.0",
+    "@toptanportal/contracts": "workspace:*",
+    "argon2": "0.41.1"
+  },
+  "devDependencies": {
+    "prisma": "5.20.0",
+    "ts-node": "10.9.2",
+    "typescript": "5.6.3",
+    "@types/node": "22.7.5"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@toptanportal/contracts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Web, iOS ve API arasindaki tek dogruluk kaynagi: roller, yetkiler, DTO semalari",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "clean": "rimraf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "rimraf": "6.0.1",
+    "vitest": "2.1.2"
+  }
+}

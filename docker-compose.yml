@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: toptanportal-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: toptanportal
+      POSTGRES_PASSWORD: toptanportal
+      POSTGRES_DB: toptanportal
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+      TZ: Europe/Istanbul
+      PGTZ: Europe/Istanbul
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "log_min_duration_statement=500"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U toptanportal -d toptanportal"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: toptanportal-redis
+    restart: unless-stopped
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+      - "--maxmemory"
+      - "512mb"
+      - "--maxmemory-policy"
+      - "volatile-lru"
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres_data:
+  redis_data:

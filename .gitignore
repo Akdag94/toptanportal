@@ -1,0 +1,47 @@
+# Bağımlılıklar
+node_modules/
+.pnpm-store/
+
+# Derleme çıktıları
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Ortam değişkenleri ve sırlar
+.env
+.env.*
+!.env.example
+certs/
+*.pem
+*.key
+*.crt
+*.p12
+*.mobileprovision
+
+# Prisma
+packages/db/prisma/*.db
+packages/db/prisma/*.db-journal
+
+# Kayıtlar ve geçici dosyalar
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.cache/
+coverage/
+.nyc_output/
+
+# Editör / işletim sistemi
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Xcode
+apps/ios/**/xcuserdata/
+apps/ios/**/*.xcworkspace/xcuserdata/
+apps/ios/**/DerivedData/
+apps/ios/**/.swiftpm/

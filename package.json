@@ -1,0 +1,29 @@
+{
+  "name": "toptanportal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ToptanPortal - HoReCa B2B E-Ticaret ve Musteri Portali",
+  "engines": {
+    "node": ">=20.11.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "build": "pnpm -r --filter=./packages/** build && pnpm -r --filter=./apps/** build",
+    "dev:api": "pnpm --filter @toptanportal/api start:dev",
+    "dev:web": "pnpm --filter @toptanportal/web dev",
+    "db:generate": "pnpm --filter @toptanportal/db generate",
+    "db:migrate": "pnpm --filter @toptanportal/db migrate:dev",
+    "db:deploy": "pnpm --filter @toptanportal/db migrate:deploy",
+    "db:seed": "pnpm --filter @toptanportal/db seed",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "infra:up": "docker compose up -d postgres redis",
+    "infra:down": "docker compose down"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "@types/node": "22.7.5",
+    "prettier": "3.3.3"
+  }
+}
