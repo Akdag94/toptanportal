@@ -9,12 +9,12 @@
   "scripts": {
     "generate": "prisma generate",
     "build": "prisma generate && tsc -p tsconfig.json",
-    "migrate:dev": "prisma migrate dev && pnpm harden",
-    "migrate:deploy": "prisma migrate deploy && pnpm harden",
-    "harden": "ts-node --transpile-only src/scripts/harden.ts",
-    "verify-audit": "ts-node --transpile-only src/scripts/verify-audit-chain.ts",
-    "seed": "ts-node --transpile-only prisma/seed.ts",
-    "studio": "prisma studio"
+    "migrate:dev": "dotenv -e ../../.env -- prisma migrate dev && pnpm harden",
+    "migrate:deploy": "dotenv -e ../../.env -- prisma migrate deploy && pnpm harden",
+    "harden": "dotenv -e ../../.env -- ts-node --transpile-only src/scripts/harden.ts",
+    "verify-audit": "dotenv -e ../../.env -- ts-node --transpile-only src/scripts/verify-audit-chain.ts",
+    "seed": "dotenv -e ../../.env -- ts-node --transpile-only prisma/seed.ts",
+    "studio": "dotenv -e ../../.env -- prisma studio"
   },
   "prisma": {
     "seed": "ts-node --transpile-only prisma/seed.ts"
@@ -25,6 +25,7 @@
     "argon2": "0.41.1"
   },
   "devDependencies": {
+    "dotenv-cli": "7.4.2",
     "prisma": "5.20.0",
     "ts-node": "10.9.2",
     "typescript": "5.6.3",

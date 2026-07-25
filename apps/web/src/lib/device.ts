@@ -11,7 +11,9 @@ import type { DeviceInfo } from '@toptanportal/contracts';
 const DEVICE_ID_KEY = 'toptanportal.deviceId';
 
 function createDeviceId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+  // randomUUID yalnizca guvenli baglamda (HTTPS / localhost) tanimlidir;
+  // aksi halde getRandomValues ile esdeger entropi uretilir.
+  if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
 

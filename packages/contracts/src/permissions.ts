@@ -176,12 +176,16 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
   ],
 };
 
-const ROLE_PERMISSION_SETS: Record<UserRole, ReadonlySet<Permission>> = Object.fromEntries(
-  (Object.keys(ROLE_PERMISSIONS) as UserRole[]).map((role) => [
-    role,
-    new Set(ROLE_PERMISSIONS[role]),
-  ]),
-) as Record<UserRole, ReadonlySet<Permission>>;
+/** Sabit zamanli yetki sorgusu icin onceden hesaplanmis kumeler. */
+const ROLE_PERMISSION_SETS: Record<UserRole, ReadonlySet<Permission>> = (() => {
+  const sets = {} as Record<UserRole, ReadonlySet<Permission>>;
+
+  for (const role of Object.keys(ROLE_PERMISSIONS) as UserRole[]) {
+    sets[role] = new Set(ROLE_PERMISSIONS[role]);
+  }
+
+  return sets;
+})();
 
 export function getPermissionsForRole(role: UserRole): readonly Permission[] {
   return ROLE_PERMISSIONS[role];
