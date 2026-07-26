@@ -40,15 +40,23 @@ export const SUPPLIER_SIDE_ROLES: readonly UserRole[] = [
 ];
 
 /**
- * 2FA zorunlulugu.
- * GDD Bolum 5: "Super Adminler, Finans yetkilileri ve Ana Isletme sahipleri icin
- * SMS OTP veya TOTP tabanli 2FA zorunlulugu."
+ * 2FA zorunlulugu - ROL BAZLI ZORUNLULUK KALDIRILDI.
+ *
+ * Urun karari: iki adimli dogrulama ISTEGE BAGLIDIR. Kullanici ilk giriste
+ * kimlik dogrulayici uygulama kurmaya zorlanmaz; dilerse hesap guvenligi
+ * ekranindan kendisi etkinlestirir.
+ *
+ * Mekanizma kaldirilmadi, yalnizca liste bosaltildi:
+ *   * Bu listeye bir rol eklenirse o rol icin 2FA yeniden zorunlu olur.
+ *   * `users.mfaRequired` alani kullanici bazinda zorunluluk tanimlamayi
+ *     surdurur (yonetici bir hesap icin acabilir).
+ *   * Kendi istegiyle 2FA kuran kullanicida alan otomatik true olur; bir kez
+ *     kurulduktan sonra her giriste kod istenir.
+ *
+ * NOT: Super Admin hesaplari icin 2FA'nin kapali olmasi bilincli bir risktir.
+ * Bu roldeki tek koruma IP beyaz listesi olarak kalir.
  */
-export const MFA_MANDATORY_ROLES: readonly UserRole[] = [
-  UserRole.SUPER_ADMIN,
-  UserRole.BUSINESS_OWNER,
-  UserRole.BUSINESS_ACCOUNTANT,
-];
+export const MFA_MANDATORY_ROLES: readonly UserRole[] = [];
 
 export function isMfaMandatory(role: UserRole): boolean {
   return MFA_MANDATORY_ROLES.includes(role);

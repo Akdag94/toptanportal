@@ -5,6 +5,9 @@
  * Beş rolün tamamı için birer hesap açar; böylece Kör Sipariş Modu ve RBAC
  * davranışları elle doğrulanabilir.
  *
+ * Hesaplar 2FA ZORUNLU DEĞİLDİR: iki adımlı doğrulama isteğe bağlıdır ve
+ * kullanıcı dilerse hesap güvenliği ekranından kendisi etkinleştirir.
+ *
  *   pnpm --filter @toptanportal/db seed
  */
 
@@ -139,7 +142,7 @@ async function main(): Promise<void> {
       fullName: 'Sistem Yöneticisi',
       role: UserRole.SUPER_ADMIN,
       companyKey: null,
-      mfaRequired: true,
+      mfaRequired: false,
     },
     {
       email: 'plasiyer@toptanportal.local',
@@ -153,7 +156,7 @@ async function main(): Promise<void> {
       fullName: 'Mavi Kapı - İşletme Sahibi',
       role: UserRole.BUSINESS_OWNER,
       companyKey: 'KAHVE',
-      mfaRequired: true,
+      mfaRequired: false,
     },
     {
       email: 'barista@mavikapi.local',
@@ -167,14 +170,14 @@ async function main(): Promise<void> {
       fullName: 'Mavi Kapı - Muhasebe',
       role: UserRole.BUSINESS_ACCOUNTANT,
       companyKey: 'KAHVE',
-      mfaRequired: true,
+      mfaRequired: false,
     },
     {
       email: 'satinalma@sahilotel.local',
       fullName: 'Sahil Otel - Satın Alma Müdürü',
       role: UserRole.BUSINESS_OWNER,
       companyKey: 'OTEL',
-      mfaRequired: true,
+      mfaRequired: false,
     },
     {
       email: 'depo@sahilotel.local',
@@ -257,7 +260,7 @@ async function main(): Promise<void> {
       `  İskonto     : ${catalog.discountCount}`,
       `  Ortak şifre : ${SEED_PASSWORD}`,
       '',
-      '  2FA zorunlu hesaplar ilk girişte TOTP kaydına yönlendirilir.',
+      '  İki adımlı doğrulama isteğe bağlıdır; hiçbir hesap ilk girişte zorlanmaz.',
       '  Süper Admin yalnızca 127.0.0.1 / ::1 adreslerinden giriş yapabilir.',
       '  Barista hesabı Kör Sipariş Modundadır: fiyat ve stok adedi görmez.',
       '',
