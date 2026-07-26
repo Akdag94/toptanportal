@@ -97,17 +97,31 @@ export default function GirisPage() {
     [oturumuTamamla],
   );
 
-  // Zorunlu 2FA kaydi: challenge alinir alinmaz QR uretilir.
+  /**
+   * Zorunlu 2FA kaydi: challenge alinir alinmaz QR uretilir.
+   *
+   * Challenge jetonu SUNUCUDA TEK KULLANIMLIKTIR (tekrar saldirisi korumasi).
+   * Bu yuzden istek jeton basina YALNIZCA BIR KEZ gonderilmelidir. React
+   * StrictMode gelistirme ortaminda etkileri iki kez calistirir; ikinci istek
+   * MFA_CHALLENGE_EXPIRED alir ve kullanici kayit adimina hic ulasamaz.
+   *
+   * Temizlemede istegi "iptal" saymak da yanlisti: sunucudaki jeton zaten
+   * tuketilmis oluyor, dolayisiyla basarili yaniti atmak durumu kurtarmiyor,
+   * tam tersine tek gecerli yaniti kaybettiriyordu.
+   */
+  const kayitIstegiGonderilen = useRef<string | null>(null);
+
   useEffect(() => {
     if (adim.tur !== 'KAYIT_BASLAT') return;
 
-    let iptal = false;
     const challengeToken = adim.challengeToken;
+
+    if (kayitIstegiGonderilen.current === challengeToken) return;
+    kayitIstegiGonderilen.current = challengeToken;
 
     void (async () => {
       try {
         const kayit = await authApi.startEnrollment(challengeToken);
-        if (iptal) return;
         setAdim({
           tur: 'KAYIT_ONAY',
           enrollmentToken: kayit.enrollmentToken,
@@ -115,16 +129,13 @@ export default function GirisPage() {
           qrCodeDataUrl: kayit.qrCodeDataUrl,
         });
       } catch (error) {
-        if (!iptal) {
-          hatayiIsle(error);
-          setAdim({ tur: 'KIMLIK' });
-        }
+        // Jeton tukendigi icin bu challenge ile tekrar denenemez; kullanici
+        // bastan giris yapmalidir.
+        kayitIstegiGonderilen.current = null;
+        hatayiIsle(error);
+        setAdim({ tur: 'KIMLIK' });
       }
     })();
-
-    return () => {
-      iptal = true;
-    };
   }, [adim, hatayiIsle]);
 
   const gonder = useCallback(
