@@ -5,4 +5,5 @@ export * from './audit';
 export * from './auth.schema';
 export * from './catalog.schema';
 export * from './order.schema';
+export * from './finance.schema';
 export * from './errors';

@@ -128,6 +128,8 @@ model Tenant {
   carts            Cart[]
   orders           Order[]
   orderTemplates   OrderTemplate[]
+  accountEntries   AccountEntry[]
+  payments         Payment[]
 
   @@map("tenants")
 }
@@ -187,6 +189,8 @@ model Company {
   orders           Order[]
   orderTemplates   OrderTemplate[]
   discountRules    DiscountRule[]
+  accountEntries   AccountEntry[]
+  payments         Payment[]
 
   @@unique([tenantId, logoCariCode])
   @@index([tenantId, isActive])
@@ -256,6 +260,7 @@ model User {
   createdOrders     Order[]             @relation("OrderCreatedBy")
   approvedOrders    Order[]             @relation("OrderApprovedBy")
   orderTemplates    OrderTemplate[]
+  recordedPayments  Payment[]           @relation("PaymentRecordedBy")
 
   @@unique([tenantId, emailNormalized])
   @@index([tenantId, role, status])
@@ -1176,4 +1181,164 @@ model OrderTemplateItem {
   @@unique([templateId, productId, unitId])
   @@index([templateId])
   @@map("order_template_items")
+}
+
+// ===========================================================================
+// CARI HESAP VE TAHSILAT
+//
+// Otorite Logo'dur: fatura, irsaliye ve dekont hareketleri kopru uzerinden
+// buraya AYNALANIR. Portal bu tabloya yazarken daima `logoFicheRef` uzerinden
+// tekillestirir; ayni hareket iki kez senkronlanirsa ikinci yazim guncelleme
+// olur, yeni satir DEGIL.
+//
+// Portal tarafinda dogan tek hareket tipi tahsilattir (PAYMENT): sanal POS
+// veya plasiyerin saha tahsilati. Bu hareketler Logo'ya outbox ile gider.
+// ===========================================================================
+
+enum AccountEntryKind {
+  /// Devir bakiyesi - donem basi
+  OPENING
+  /// Satis faturasi (borc)
+  INVOICE
+  /// Iade faturasi (alacak)
+  RETURN
+  /// Tahsilat (alacak)
+  PAYMENT
+  /// Alacak dekontu - iskonto, ciro primi
+  CREDIT_NOTE
+  /// Borc dekontu - masraf yansitma, vade farki
+  DEBIT_NOTE
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CREDIT_CARD
+  CHEQUE
+  PROMISSORY_NOTE
+  /// Dogrudan Borclandirma Sistemi
+  DBS
+}
+
+enum PaymentStatus {
+  /// Kayit alindi, banka/POS onayi bekleniyor
+  PENDING
+  CONFIRMED
+  FAILED
+  CANCELLED
+}
+
+/// Cari hesap hareketi. Bir belge = bir satir.
+model AccountEntry {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  companyId String  @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  kind AccountEntryKind
+
+  /// Belge tarihi - ekstrenin siralama anahtari
+  entryDate DateTime @db.Date
+  /// Vade tarihi. Yalnizca borc doguran belgelerde dolu olur.
+  dueDate   DateTime? @db.Date
+
+  documentNumber String  @db.VarChar(32)
+  description    String? @db.VarChar(280)
+
+  /// Borc (bizim alacagimiz) ve alacak birlikte tutulur; biri daima sifirdir.
+  /// Ayri kolon secildi cunku ekstre gorunumu ve yaslandirma sorgulari bu iki
+  /// degeri ayri toplar - isaretli tek kolon her sorguda CASE gerektirirdi.
+  debit  Decimal @default(0) @db.Decimal(18, 4)
+  credit Decimal @default(0) @db.Decimal(18, 4)
+
+  /// Belgenin kapanmamis kismi. Tahsilat eslestirmesi burayi dusurur; sifira
+  /// indiginde belge kapanmis sayilir ve yaslandirmadan cikar.
+  openAmount Decimal @default(0) @db.Decimal(18, 4)
+
+  currency String @default("TRY") @db.VarChar(3)
+
+  /// Logo fis referansi - senkronizasyonun tekillestirme anahtari
+  logoFicheRef Int?
+  logoSyncedAt DateTime? @db.Timestamptz(6)
+
+  /// Portal siparisinden dogduysa izini tasir
+  orderId String? @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  payment     Payment?
+  allocations PaymentAllocation[]
+
+  @@unique([tenantId, logoFicheRef])
+  @@index([companyId, entryDate])
+  @@index([companyId, dueDate])
+  @@index([tenantId, companyId, createdAt])
+  @@map("account_entries")
+}
+
+/// Portal uzerinden alinan tahsilat. Onaylandiginda cari harekete donusur.
+model Payment {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  companyId String  @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  method PaymentMethod
+  status PaymentStatus @default(PENDING)
+
+  amount   Decimal @db.Decimal(18, 4)
+  currency String  @default("TRY") @db.VarChar(3)
+
+  receivedAt DateTime @db.Timestamptz(6)
+  /// Dekont / makbuz / cek numarasi
+  reference  String?  @db.VarChar(64)
+  note       String?  @db.VarChar(280)
+
+  /// Kaydi giren kullanici. Saha tahsilatinda plasiyer, portalde muhasebeci.
+  recordedByUserId String @db.Uuid
+  recordedBy       User   @relation("PaymentRecordedBy", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+  /// Plasiyer saha tahsilati ise true - kasa mutabakati bu alandan yurur.
+  isFieldCollection Boolean @default(false)
+
+  /// Sanal POS saglayici referansi (3D Secure islem kimligi)
+  providerRef   String? @db.VarChar(64)
+  failureReason String? @db.VarChar(280)
+
+  /// Onaylandiginda olusan cari hareket. Tek yonlu 1-1.
+  entryId String? @unique @db.Uuid
+  entry   AccountEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
+
+  confirmedAt DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  allocations PaymentAllocation[]
+
+  @@index([companyId, receivedAt])
+  @@index([tenantId, status, receivedAt])
+  @@index([recordedByUserId, receivedAt])
+  @@map("payments")
+}
+
+/// Tahsilatin hangi belgeyi ne kadar kapattigi. Kismi kapama mumkundur.
+model PaymentAllocation {
+  id        String  @id @default(uuid()) @db.Uuid
+  paymentId String  @db.Uuid
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  entryId String       @db.Uuid
+  entry   AccountEntry @relation(fields: [entryId], references: [id], onDelete: Restrict)
+
+  amount Decimal @db.Decimal(18, 4)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([paymentId, entryId])
+  @@index([entryId])
+  @@map("payment_allocations")
 }

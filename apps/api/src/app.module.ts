@@ -20,6 +20,7 @@ import { AuditModule } from './common/audit/audit.module';
 import { CryptoModule } from './common/crypto/crypto.module';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { RedisModule } from './common/redis/redis.module';
+import { CompanyScopeModule } from './common/context/company-scope.module';
 import { RequestContextMiddleware } from './common/context/request-context.middleware';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { BlindOrderInterceptor } from './common/interceptors/blind-order.interceptor';
@@ -32,6 +33,7 @@ import { OutboxModule } from './common/outbox/outbox.module';
 import { AuthModule } from './auth/auth.module';
 import { CartModule } from './cart/cart.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { FinanceModule } from './finance/finance.module';
 import { HealthModule } from './health/health.module';
 import { MaintenanceModule } from './maintenance/maintenance.module';
 import { OrdersModule } from './orders/orders.module';
@@ -51,6 +53,7 @@ import { StockModule } from './stock/stock.module';
     AuditModule,
     OutboxModule,
     IdempotencyModule,
+    CompanyScopeModule,
     AuthModule,
     HealthModule,
     PricingModule,
@@ -58,6 +61,7 @@ import { StockModule } from './stock/stock.module';
     CatalogModule,
     CartModule,
     OrdersModule,
+    FinanceModule,
     MaintenanceModule,
   ],
   providers: [
