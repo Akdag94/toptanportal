@@ -43,6 +43,16 @@ const MENU: MenuGrubu[] = [
         yetkiler: [Permission.CATALOG_VIEW],
       },
       {
+        baslik: 'Sepetim',
+        yol: '/panel/sepet',
+        yetkiler: [Permission.ORDER_DRAFT],
+      },
+      {
+        baslik: 'Rutin Şablonlarım',
+        yol: '/panel/sablonlar',
+        yetkiler: [Permission.ORDER_TEMPLATE_MANAGE],
+      },
+      {
         baslik: 'Siparişlerim',
         yol: '/panel/siparisler',
         yetkiler: [
