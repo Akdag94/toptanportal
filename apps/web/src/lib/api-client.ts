@@ -16,9 +16,20 @@
 
 import type {
   ApiErrorBody,
+  ApplyTemplateResult,
+  CartItemInput,
+  CartView,
+  CatalogPage,
+  CatalogProduct,
   ErrorCode,
   LoginResponse,
+  OrderListQuery,
+  OrderTemplateView,
+  OrderView,
+  PlaceOrderRequest,
+  PlaceOrderResult,
   SessionUser,
+  StockShortage,
   TokenPair,
 } from '@toptanportal/contracts';
 
@@ -33,6 +44,7 @@ export class ApiError extends Error {
   readonly code: ErrorCode;
   readonly statusCode: number;
   readonly details?: Record<string, string[]>;
+  readonly context?: Record<string, unknown>;
   readonly requestId: string;
 
   constructor(body: ApiErrorBody) {
@@ -41,7 +53,18 @@ export class ApiError extends Error {
     this.code = body.code;
     this.statusCode = body.statusCode;
     this.details = body.details;
+    this.context = body.context;
     this.requestId = body.requestId;
+  }
+
+  /**
+   * Stok yetersizliginde hangi satirlarin sorunlu oldugu.
+   * Kor Siparis Modunda `available` alani GELMEZ; arayuz bu alanin varligini
+   * kontrol etmeli, degerine guvenmemelidir.
+   */
+  get stockShortages(): StockShortage[] {
+    const shortages = this.context?.shortages;
+    return Array.isArray(shortages) ? (shortages as StockShortage[]) : [];
   }
 }
 
@@ -269,6 +292,115 @@ export const authApi = {
       method: 'POST',
       body: { allDevices },
     }),
+};
+
+// ---------------------------------------------------------------------------
+// Katalog, sepet ve siparis uc noktalari
+//
+// KOR SIPARIS NOTU: Asagidaki tiplerde fiyat alanlari opsiyoneldir cunku
+// sunucu yetkisi olmayan kullaniciya bu alanlari HIC gondermez. Arayuz
+// `typeof x === 'number'` kontrolu yapmali, `x ?? 0` gibi varsayilan
+// ATAMAMALIDIR - sifir fiyat, gizlenmis fiyattan farksiz gorunur.
+// ---------------------------------------------------------------------------
+
+export interface CatalogFilters {
+  q?: string;
+  category?: string;
+  brand?: string;
+  inStockOnly?: boolean;
+  cursor?: string;
+  limit?: number;
+}
+
+function toQuery(params: Record<string, string | number | boolean | undefined>): string {
+  const search = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === '') continue;
+    search.set(key, String(value));
+  }
+
+  const query = search.toString();
+  return query.length > 0 ? `?${query}` : '';
+}
+
+export const catalogApi = {
+  list: (filters: CatalogFilters = {}) =>
+    request<CatalogPage>(`/catalog/products${toQuery({ ...filters })}`),
+
+  detail: (productId: string) => request<CatalogProduct>(`/catalog/products/${productId}`),
+
+  byBarcode: (barcode: string) =>
+    request<{ product: CatalogProduct; matchedUnitCode: string | null }>('/catalog/barcode', {
+      method: 'POST',
+      body: { barcode },
+    }),
+};
+
+export const cartApi = {
+  get: () => request<CartView>('/cart'),
+
+  replace: (items: CartItemInput[], note?: string) =>
+    request<CartView>('/cart', { method: 'PUT', body: { items, note } }),
+
+  addItem: (item: CartItemInput) =>
+    request<CartView>('/cart/items', { method: 'POST', body: item }),
+
+  setQuantity: (productId: string, unitId: string, quantity: number) =>
+    request<CartView>(`/cart/items/${productId}/${unitId}`, {
+      method: 'PATCH',
+      body: { quantity },
+    }),
+
+  removeItem: (productId: string, unitId: string) =>
+    request<CartView>(`/cart/items/${productId}/${unitId}`, { method: 'DELETE' }),
+
+  clear: () => request<CartView>('/cart', { method: 'DELETE' }),
+};
+
+export const orderApi = {
+  /**
+   * Idempotency-Key zorunlu gonderilir: zayif baglantida kullanici "Siparişi
+   * Tamamla" dugmesine iki kez basarsa ikinci istek yeni siparis ACMAZ.
+   */
+  place: (body: PlaceOrderRequest, idempotencyKey: string) =>
+    request<PlaceOrderResult>('/orders', {
+      method: 'POST',
+      body,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    }),
+
+  list: (query: Partial<OrderListQuery> = {}) =>
+    request<{ items: OrderView[]; nextCursor: string | null }>(
+      `/orders${toQuery({ ...query })}`,
+    ),
+
+  detail: (orderId: string) => request<OrderView>(`/orders/${orderId}`),
+
+  approve: (orderId: string) =>
+    request<OrderView>(`/orders/${orderId}/approve`, { method: 'POST' }),
+
+  reject: (orderId: string, reason: string) =>
+    request<OrderView>(`/orders/${orderId}/reject`, { method: 'POST', body: { reason } }),
+
+  cancel: (orderId: string) =>
+    request<OrderView>(`/orders/${orderId}/cancel`, { method: 'POST' }),
+};
+
+export const templateApi = {
+  list: () => request<OrderTemplateView[]>('/order-templates'),
+
+  createFromCart: (name: string, isShared: boolean) =>
+    request<OrderTemplateView>('/order-templates/from-cart', {
+      method: 'POST',
+      body: { name, isShared },
+    }),
+
+  apply: (templateId: string) =>
+    request<ApplyTemplateResult>(`/order-templates/${templateId}/apply`, { method: 'POST' }),
+
+  remove: (templateId: string) =>
+    request<void>(`/order-templates/${templateId}`, { method: 'DELETE' }),
 };
 
 export { emitSessionChange };
