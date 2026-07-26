@@ -19,7 +19,7 @@ import { useSession } from '../../lib/session-context';
 interface MenuOgesi {
   baslik: string;
   yol: string;
-  /** Bu yetkilerden en az biri gerekir. */
+  /** Bu yetkilerden en az biri gerekir. Bos dizi: herkese acik. */
   yetkiler: Permission[];
 }
 
@@ -119,6 +119,18 @@ const MENU: MenuGrubu[] = [
     ],
   },
   {
+    baslik: 'Hesap',
+    ogeler: [
+      {
+        baslik: 'Hesap Güvenliği',
+        yol: '/panel/guvenlik',
+        // Herkese acik: iki adimli dogrulama istege baglidir ve her kullanici
+        // kendi oturumlarini gorebilmelidir.
+        yetkiler: [],
+      },
+    ],
+  },
+  {
     baslik: 'Yönetim',
     ogeler: [
       {
@@ -161,7 +173,9 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
   const yetkiler = new Set(user.permissions);
   const gruplar = MENU.map((grup) => ({
     baslik: grup.baslik,
-    ogeler: grup.ogeler.filter((oge) => oge.yetkiler.some((yetki) => yetkiler.has(yetki))),
+    ogeler: grup.ogeler.filter(
+      (oge) => oge.yetkiler.length === 0 || oge.yetkiler.some((yetki) => yetkiler.has(yetki)),
+    ),
   })).filter((grup) => grup.ogeler.length > 0);
 
   return (

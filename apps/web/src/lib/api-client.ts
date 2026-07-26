@@ -15,6 +15,7 @@
  */
 
 import type {
+  ActiveSession,
   ApiErrorBody,
   ApplyTemplateResult,
   CartItemInput,
@@ -286,6 +287,30 @@ export const authApi = {
     }),
 
   me: () => request<SessionUser>('/auth/me'),
+
+  /**
+   * Gonullu 2FA kaydi. Zorunlu akistan (mfa/enrollment) ayridir: burada
+   * kullanici zaten oturum acmistir ve kaydi kendi istegiyle baslatir.
+   */
+  setupMfa: () =>
+    request<{
+      secret: string;
+      otpauthUri: string;
+      qrCodeDataUrl: string;
+      enrollmentToken: string;
+      expiresIn: number;
+    }>('/auth/mfa/setup', { method: 'POST', body: getDeviceInfo() }),
+
+  confirmSetupMfa: (code: string) =>
+    request<{ recoveryCodes: string[] }>('/auth/mfa/setup/confirm', {
+      method: 'POST',
+      body: { code },
+    }),
+
+  sessions: () => request<{ sessions: ActiveSession[] }>('/auth/sessions'),
+
+  revokeSession: (sessionId: string) =>
+    request<void>(`/auth/sessions/${sessionId}`, { method: 'DELETE' }),
 
   logout: (allDevices: boolean) =>
     request<{ revokedSessions: number }>('/auth/logout', {
