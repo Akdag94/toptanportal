@@ -1,8 +1,9 @@
 /**
  * ToptanPortal - Saglik Uc Noktalari
  *
- * /health/live  : surec ayakta mi (Kubernetes liveness)
- * /health/ready : bagimliliklar hazir mi (Kubernetes readiness)
+ * /health/live      : surec ayakta mi (Kubernetes liveness)
+ * /health/ready     : bagimliliklar hazir mi (Kubernetes readiness)
+ * /health/pipeline  : ticari akisin sikismis noktalari (yalnizca yonetici)
  *
  * Readiness, veritabani veya Redis erisilemezse 503 doner ve yuk dengeleyici
  * trafigi bu ornege yonlendirmez.
@@ -10,16 +11,36 @@
 
 import { Controller, Get, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ErrorCode, Permission } from '@toptanportal/contracts';
+import { OrderStatus, OutboxStatus, ReservationStatus } from '@toptanportal/db';
 
-import { Public } from '../common/decorators';
+import { Public, RequirePermissions } from '../common/decorators';
 import { ApiException } from '../common/exceptions/api.exception';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { RedisService } from '../common/redis/redis.service';
-import { ErrorCode } from '@toptanportal/contracts';
 
 interface ReadinessReport {
   status: 'HAZIR' | 'HAZIR_DEGIL';
   checks: { database: boolean; redis: boolean };
+  timestamp: string;
+}
+
+/**
+ * Ticari akisin operasyonel gorunumu.
+ * Bu sayilar bir isin YAPILMADIGINI degil, BEKLEDIGINI gosterir; bekleme
+ * tasarim geregidir, fark edilmemesi degildir.
+ */
+interface PipelineReport {
+  /** Isletme yetkilisinin onayini bekleyen siparisler. */
+  onayBekleyen: number;
+  /** Onaylanmis, Logo'ya iletilmeyi bekleyen siparisler. */
+  kuyruktaBekleyen: number;
+  /** Azami deneme sayisi asilmis, manuel mudahale bekleyen olaylar. */
+  iletilemeyen: number;
+  /** Gonderilmeyi bekleyen outbox olaylari. */
+  bekleyenOlay: number;
+  /** Suresi dolmus ama henuz serbest birakilmamis stok rezervasyonlari. */
+  suresiDolmusRezervasyon: number;
   timestamp: string;
 }
 
@@ -60,5 +81,33 @@ export class HealthController {
     }
 
     return report;
+  }
+
+  @Get('pipeline')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.ADMIN_SETTINGS_MANAGE)
+  @ApiOperation({ summary: 'Sipariş akışının bekleyen iş sayıları' })
+  async pipeline(): Promise<PipelineReport> {
+    const now = new Date();
+
+    const [onayBekleyen, kuyruktaBekleyen, iletilemeyen, bekleyenOlay, suresiDolmusRezervasyon] =
+      await Promise.all([
+        this.prisma.order.count({ where: { status: OrderStatus.PENDING_APPROVAL } }),
+        this.prisma.order.count({ where: { status: OrderStatus.QUEUED } }),
+        this.prisma.outboxEvent.count({ where: { status: OutboxStatus.DEAD } }),
+        this.prisma.outboxEvent.count({ where: { status: OutboxStatus.PENDING } }),
+        this.prisma.stockReservation.count({
+          where: { status: ReservationStatus.HELD, expiresAt: { lt: now } },
+        }),
+      ]);
+
+    return {
+      onayBekleyen,
+      kuyruktaBekleyen,
+      iletilemeyen,
+      bekleyenOlay,
+      suresiDolmusRezervasyon,
+      timestamp: now.toISOString(),
+    };
   }
 }

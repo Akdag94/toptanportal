@@ -47,6 +47,18 @@ const envSchema = z
     TOTP_ISSUER: z.string().min(1).default('ToptanPortal'),
     SUPER_ADMIN_IP_WHITELIST_ENFORCED: booleanFromEnv.default(true),
 
+    /**
+     * Bakim gorevleri. Yalnizca gorevleri ayri bir surecte calistiran
+     * kurulumlarda kapatilir; tek surecli kurulumda kapatmak, suresi dolan
+     * stok rezervasyonlarinin hic serbest birakilmamasi demektir.
+     */
+    MAINTENANCE_JOBS_ENABLED: booleanFromEnv.default(true),
+    JOB_RESERVATION_RELEASE_SECONDS: z.coerce.number().int().min(30).max(3600).default(120),
+    JOB_IDEMPOTENCY_PURGE_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
+    JOB_OUTBOX_WATCH_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
+    /** Bu sureden uzun bekleyen outbox olayi uyari uretir. */
+    OUTBOX_STALE_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
+
     LOGO_BRIDGE_BASE_URL: z.string().url().optional(),
     LOGO_BRIDGE_CLIENT_CERT_PATH: z.string().optional(),
     LOGO_BRIDGE_CLIENT_KEY_PATH: z.string().optional(),

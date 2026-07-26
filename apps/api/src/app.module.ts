@@ -33,6 +33,7 @@ import { AuthModule } from './auth/auth.module';
 import { CartModule } from './cart/cart.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { HealthModule } from './health/health.module';
+import { MaintenanceModule } from './maintenance/maintenance.module';
 import { OrdersModule } from './orders/orders.module';
 import { PricingModule } from './pricing/pricing.module';
 import { StockModule } from './stock/stock.module';
@@ -57,6 +58,7 @@ import { StockModule } from './stock/stock.module';
     CatalogModule,
     CartModule,
     OrdersModule,
+    MaintenanceModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
