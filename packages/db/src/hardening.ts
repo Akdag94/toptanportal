@@ -185,4 +185,199 @@ CREATE INDEX IF NOT EXISTS idx_trusted_devices_valid
 ON trusted_devices ("userId", "deviceIdHash", "trustedUntil")
 WHERE "revokedAt" IS NULL;`,
   },
+
+  // -------------------------------------------------------------------------
+  // 7) Birim cevrim katsayisi SIFIR OLAMAZ.
+  //    Sifir katsayi, secilen birimin ana birim karsiligini sifira dusurur;
+  //    stoktan hic dusmeyen ama sevk edilen siparis demektir. Uygulama katmani
+  //    hata yapsa bile veritabani bunu kabul etmemelidir.
+  // -------------------------------------------------------------------------
+  {
+    name: 'product_units conversion factor check',
+    sql: `
+DO $do$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_product_units_conversion_positive'
+  ) THEN
+    ALTER TABLE product_units ADD CONSTRAINT chk_product_units_conversion_positive
+      CHECK ("conversionFactor" > 0);
+  END IF;
+END
+$do$;`,
+  },
+  {
+    name: 'products rate and quantity checks',
+    sql: `
+DO $do$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_products_rates_non_negative'
+  ) THEN
+    ALTER TABLE products ADD CONSTRAINT chk_products_rates_non_negative CHECK (
+      "vatRate" >= 0 AND "vatRate" <= 100
+      AND "minOrderQuantity" >= 0
+      AND ("maxOrderQuantity" IS NULL OR "maxOrderQuantity" >= "minOrderQuantity")
+    );
+  END IF;
+END
+$do$;`,
+  },
+
+  // -------------------------------------------------------------------------
+  // 8) Fiyat ve iskonto siniri.
+  //    %100'u asan iskonto negatif tutarli siparis uretir; kademe esigi negatif
+  //    olamaz.
+  // -------------------------------------------------------------------------
+  {
+    name: 'price_list_items non-negative check',
+    sql: `
+DO $do$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_price_list_items_non_negative'
+  ) THEN
+    ALTER TABLE price_list_items ADD CONSTRAINT chk_price_list_items_non_negative
+      CHECK (price >= 0 AND "minQuantity" >= 0);
+  END IF;
+END
+$do$;`,
+  },
+  {
+    name: 'discount_rules rate bounds check',
+    sql: `
+DO $do$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_discount_rules_rate_bounds'
+  ) THEN
+    ALTER TABLE discount_rules ADD CONSTRAINT chk_discount_rules_rate_bounds CHECK (
+      "ratePercent" >= 0 AND "ratePercent" <= 100
+      AND "minQuantity" >= 0
+      AND "chainOrder" >= 1
+    );
+  END IF;
+END
+$do$;`,
+  },
+
+  // -------------------------------------------------------------------------
+  // 9) Stok defteri butunlugu.
+  //    portalReserved yalnizca portalin kendi tuttugu rezervlerin toplamidir;
+  //    negatife dusmesi, bir rezervin IKI KEZ serbest birakildigini gosterir.
+  //    Bu durumda stok oolmadigi halde var gorunur.
+  // -------------------------------------------------------------------------
+  {
+    name: 'stock_snapshots reserved non-negative check',
+    sql: `
+DO $do$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_stock_snapshots_reserved_non_negative'
+  ) THEN
+    ALTER TABLE stock_snapshots ADD CONSTRAINT chk_stock_snapshots_reserved_non_negative
+      CHECK ("portalReserved" >= 0 AND "logoReserved" >= 0);
+  END IF;
+END
+$do$;`,
+  },
+  {
+    name: 'stock_reservations quantity check',
+    sql: `
+DO $do$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_stock_reservations_quantity_positive'
+  ) THEN
+    ALTER TABLE stock_reservations ADD CONSTRAINT chk_stock_reservations_quantity_positive
+      CHECK (quantity > 0);
+  END IF;
+END
+$do$;`,
+  },
+
+  // -------------------------------------------------------------------------
+  // 10) Siparis belgesi kendi icinde tutarli olmalidir.
+  //     net = brut - iskonto ve satir toplami = net + KDV esitlikleri, belgeyi
+  //     sonradan okuyan denetcinin yapacagi ilk kontroldur. Hatali bir yazici
+  //     kod bu esitligi bozarsa kayit hic olusmamalidir.
+  // -------------------------------------------------------------------------
+  {
+    name: 'order_lines arithmetic integrity check',
+    sql: `
+DO $do$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_order_lines_arithmetic'
+  ) THEN
+    ALTER TABLE order_lines ADD CONSTRAINT chk_order_lines_arithmetic CHECK (
+      quantity > 0
+      AND "baseQuantity" > 0
+      AND "conversionFactor" > 0
+      AND "discountTotal" >= 0
+      AND "unitPrice" >= 0
+      AND "netAmount" = "grossAmount" - "discountTotal"
+      AND "lineTotal" = "netAmount" + "vatAmount"
+    );
+  END IF;
+END
+$do$;`,
+  },
+  {
+    name: 'orders totals integrity check',
+    sql: `
+DO $do$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_orders_totals'
+  ) THEN
+    ALTER TABLE orders ADD CONSTRAINT chk_orders_totals CHECK (
+      "grossTotal" >= 0
+      AND "discountTotal" >= 0
+      AND "netTotal" = "grossTotal" - "discountTotal"
+      AND "grandTotal" = "netTotal" + "vatTotal"
+    );
+  END IF;
+END
+$do$;`,
+  },
+  {
+    name: 'cart_items quantity check',
+    sql: `
+DO $do$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_cart_items_quantity_positive'
+  ) THEN
+    ALTER TABLE cart_items ADD CONSTRAINT chk_cart_items_quantity_positive
+      CHECK (quantity > 0);
+  END IF;
+END
+$do$;`,
+  },
+
+  // -------------------------------------------------------------------------
+  // 11) Ticari akisin sicak sorgulari icin kismi indeksler.
+  // -------------------------------------------------------------------------
+  {
+    name: 'orders pending approval index',
+    sql: `
+CREATE INDEX IF NOT EXISTS idx_orders_pending_approval
+ON orders ("companyId", "submittedAt")
+WHERE status = 'PENDING_APPROVAL';`,
+  },
+  {
+    name: 'stock reservations held index',
+    sql: `
+CREATE INDEX IF NOT EXISTS idx_stock_reservations_held
+ON stock_reservations ("expiresAt")
+WHERE status = 'HELD';`,
+  },
+  {
+    name: 'products published catalog index',
+    sql: `
+CREATE INDEX IF NOT EXISTS idx_products_published
+ON products ("tenantId", "sortOrder", name)
+WHERE status = 'PUBLISHED';`,
+  },
 ];

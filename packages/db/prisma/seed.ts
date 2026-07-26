@@ -8,7 +8,15 @@
  *   pnpm --filter @toptanportal/db seed
  */
 
-import { PrismaClient, UserRole, UserStatus, MfaMethod } from '@prisma/client';
+import {
+  DiscountKind,
+  DiscountScope,
+  MfaMethod,
+  PrismaClient,
+  ProductStatus,
+  UserRole,
+  UserStatus,
+} from '@prisma/client';
 import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
@@ -235,6 +243,8 @@ async function main(): Promise<void> {
     });
   }
 
+  const catalog = await seedCatalog(tenant.id, companies);
+
   process.stdout.write(
     [
       '',
@@ -242,13 +252,382 @@ async function main(): Promise<void> {
       `  Kiracı      : ${tenant.title} (${tenant.code})`,
       `  İşletme     : ${companies.size}`,
       `  Kullanıcı   : ${createdUsers.size}`,
+      `  Ürün        : ${catalog.productCount}`,
+      `  Fiyat satırı: ${catalog.priceItemCount}`,
+      `  İskonto     : ${catalog.discountCount}`,
       `  Ortak şifre : ${SEED_PASSWORD}`,
       '',
       '  2FA zorunlu hesaplar ilk girişte TOTP kaydına yönlendirilir.',
       '  Süper Admin yalnızca 127.0.0.1 / ::1 adreslerinden giriş yapabilir.',
+      '  Barista hesabı Kör Sipariş Modundadır: fiyat ve stok adedi görmez.',
       '',
     ].join('\n'),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Katalog, stok, fiyat ve iskonto
+// ---------------------------------------------------------------------------
+
+interface ProductSpec {
+  code: string;
+  name: string;
+  brand: string;
+  categoryPath: string;
+  baseUnit: { code: string; name: string };
+  /** Ana birim disindaki birimler: 1 birim = kac ana birim */
+  packUnits: { code: string; name: string; factor: number; isDefault?: boolean }[];
+  vatRate: number;
+  /** Ana birimde: genel liste fiyati */
+  basePrice: number;
+  onHand: number;
+  criticalThreshold: number;
+  barcodes: { barcode: string; unitCode: string }[];
+}
+
+const PRODUCT_SPECS: ProductSpec[] = [
+  {
+    code: 'KHV-001',
+    name: 'Espresso Çekirdek Kahve 1 kg',
+    brand: 'Demo Roastery',
+    categoryPath: 'İçecek/Kahve/Çekirdek',
+    baseUnit: { code: 'ADET', name: 'Adet' },
+    packUnits: [{ code: 'KOLI', name: 'Koli (6 adet)', factor: 6, isDefault: true }],
+    vatRate: 10,
+    basePrice: 420,
+    onHand: 480,
+    criticalThreshold: 60,
+    barcodes: [
+      { barcode: '8690000000017', unitCode: 'ADET' },
+      { barcode: '18690000000014', unitCode: 'KOLI' },
+    ],
+  },
+  {
+    code: 'SUT-001',
+    name: 'Tam Yağlı Süt 1 L',
+    brand: 'Demo Süt',
+    categoryPath: 'Süt Ürünleri/Süt',
+    baseUnit: { code: 'ADET', name: 'Adet' },
+    packUnits: [{ code: 'KOLI', name: 'Koli (12 adet)', factor: 12, isDefault: true }],
+    vatRate: 1,
+    basePrice: 32.5,
+    onHand: 1440,
+    criticalThreshold: 240,
+    barcodes: [{ barcode: '8690000000024', unitCode: 'ADET' }],
+  },
+  {
+    code: 'SRP-001',
+    name: 'Karamel Aroma Şurubu 700 ml',
+    brand: 'Demo Syrup',
+    categoryPath: 'İçecek/Aroma Şurupları',
+    baseUnit: { code: 'ADET', name: 'Adet' },
+    packUnits: [{ code: 'KOLI', name: 'Koli (6 adet)', factor: 6, isDefault: true }],
+    vatRate: 20,
+    basePrice: 268,
+    onHand: 54,
+    criticalThreshold: 60,
+    barcodes: [{ barcode: '8690000000031', unitCode: 'ADET' }],
+  },
+  {
+    code: 'BRD-001',
+    name: 'Ekşi Maya Ekmek 500 g',
+    brand: 'Demo Fırın',
+    categoryPath: 'Fırın/Ekmek',
+    baseUnit: { code: 'ADET', name: 'Adet' },
+    packUnits: [{ code: 'KASA', name: 'Kasa (10 adet)', factor: 10, isDefault: true }],
+    vatRate: 1,
+    basePrice: 42,
+    onHand: 0,
+    criticalThreshold: 20,
+    barcodes: [{ barcode: '8690000000048', unitCode: 'ADET' }],
+  },
+  {
+    code: 'PCT-001',
+    name: 'Karton Bardak 8 oz (50\'li)',
+    brand: 'Demo Pack',
+    categoryPath: 'Sarf/Ambalaj',
+    baseUnit: { code: 'PAKET', name: 'Paket' },
+    packUnits: [{ code: 'KOLI', name: 'Koli (20 paket)', factor: 20, isDefault: true }],
+    vatRate: 20,
+    basePrice: 96,
+    onHand: 620,
+    criticalThreshold: 100,
+    barcodes: [{ barcode: '8690000000055', unitCode: 'PAKET' }],
+  },
+];
+
+async function seedCatalog(
+  tenantId: string,
+  companies: Map<string, string>,
+): Promise<{ productCount: number; priceItemCount: number; discountCount: number }> {
+  const warehouse = await prisma.warehouse.upsert({
+    where: { tenantId_logoWarehouseNo: { tenantId, logoWarehouseNo: 0 } },
+    update: {},
+    create: {
+      tenantId,
+      logoWarehouseNo: 0,
+      name: 'Merkez Depo',
+      city: 'İstanbul',
+      isDefault: true,
+    },
+  });
+
+  // Genel liste tum carilere; ozel listeler cari kartindaki numaraya baglidir.
+  const generalList = await prisma.priceList.upsert({
+    where: { tenantId_logoPriceListNo: { tenantId, logoPriceListNo: 1 } },
+    update: {},
+    create: {
+      tenantId,
+      logoPriceListNo: 1,
+      name: 'Genel Satış Listesi',
+      isDefault: true,
+      vatIncluded: false,
+    },
+  });
+
+  const cafeList = await prisma.priceList.upsert({
+    where: { tenantId_logoPriceListNo: { tenantId, logoPriceListNo: 3 } },
+    update: {},
+    create: {
+      tenantId,
+      logoPriceListNo: 3,
+      name: 'Kafe & Kahveci Listesi',
+      vatIncluded: false,
+    },
+  });
+
+  const hotelList = await prisma.priceList.upsert({
+    where: { tenantId_logoPriceListNo: { tenantId, logoPriceListNo: 5 } },
+    update: {},
+    create: {
+      tenantId,
+      logoPriceListNo: 5,
+      name: 'Otel & Zincir Listesi',
+      vatIncluded: false,
+    },
+  });
+
+  let priceItemCount = 0;
+  let discountCount = 0;
+
+  for (const [index, spec] of PRODUCT_SPECS.entries()) {
+    const product = await prisma.product.upsert({
+      where: { tenantId_logoItemCode: { tenantId, logoItemCode: spec.code } },
+      update: {},
+      create: {
+        tenantId,
+        logoItemCode: spec.code,
+        name: spec.name,
+        brand: spec.brand,
+        categoryPath: spec.categoryPath,
+        baseUnitCode: spec.baseUnit.code,
+        baseUnitName: spec.baseUnit.name,
+        vatRate: spec.vatRate,
+        criticalStockThreshold: spec.criticalThreshold,
+        minOrderQuantity: 0,
+        status: ProductStatus.PUBLISHED,
+        sortOrder: index,
+      },
+    });
+
+    const baseUnit = await prisma.productUnit.upsert({
+      where: { productId_code: { productId: product.id, code: spec.baseUnit.code } },
+      update: {},
+      create: {
+        productId: product.id,
+        code: spec.baseUnit.code,
+        name: spec.baseUnit.name,
+        conversionFactor: 1,
+        isBaseUnit: true,
+        isDefaultForOrder: spec.packUnits.every((unit) => !unit.isDefault),
+        sortOrder: 0,
+      },
+    });
+
+    for (const [unitIndex, packUnit] of spec.packUnits.entries()) {
+      await prisma.productUnit.upsert({
+        where: { productId_code: { productId: product.id, code: packUnit.code } },
+        update: {},
+        create: {
+          productId: product.id,
+          code: packUnit.code,
+          name: packUnit.name,
+          conversionFactor: packUnit.factor,
+          isBaseUnit: false,
+          isDefaultForOrder: packUnit.isDefault ?? false,
+          sortOrder: unitIndex + 1,
+        },
+      });
+    }
+
+    for (const barcode of spec.barcodes) {
+      await prisma.productBarcode.upsert({
+        where: { productId_barcode: { productId: product.id, barcode: barcode.barcode } },
+        update: {},
+        create: {
+          productId: product.id,
+          barcode: barcode.barcode,
+          unitCode: barcode.unitCode,
+        },
+      });
+    }
+
+    await prisma.stockSnapshot.upsert({
+      where: { productId_warehouseId: { productId: product.id, warehouseId: warehouse.id } },
+      update: {},
+      create: {
+        productId: product.id,
+        warehouseId: warehouse.id,
+        onHand: spec.onHand,
+        logoReserved: 0,
+        portalReserved: 0,
+      },
+    });
+
+    // Fiyatlar ANA BIRIMDE tanimlanir; koli fiyati cevrim katsayisiyla turetilir.
+    // Kafe listesi %4, otel listesi %7 daha avantajlidir.
+    const listPrices: { listId: string; price: number }[] = [
+      { listId: generalList.id, price: spec.basePrice },
+      { listId: cafeList.id, price: round2(spec.basePrice * 0.96) },
+      { listId: hotelList.id, price: round2(spec.basePrice * 0.93) },
+    ];
+
+    for (const entry of listPrices) {
+      await prisma.priceListItem.upsert({
+        where: {
+          priceListId_productId_unitId_minQuantity: {
+            priceListId: entry.listId,
+            productId: product.id,
+            unitId: baseUnit.id,
+            minQuantity: 0,
+          },
+        },
+        update: {},
+        create: {
+          priceListId: entry.listId,
+          productId: product.id,
+          unitId: baseUnit.id,
+          price: entry.price,
+          minQuantity: 0,
+        },
+      });
+      priceItemCount += 1;
+    }
+
+    // Kademeli fiyat ornegi: kahvede 120 adet ve uzeri ek avantaj.
+    if (spec.code === 'KHV-001') {
+      await prisma.priceListItem.upsert({
+        where: {
+          priceListId_productId_unitId_minQuantity: {
+            priceListId: cafeList.id,
+            productId: product.id,
+            unitId: baseUnit.id,
+            minQuantity: 120,
+          },
+        },
+        update: {},
+        create: {
+          priceListId: cafeList.id,
+          productId: product.id,
+          unitId: baseUnit.id,
+          price: round2(spec.basePrice * 0.9),
+          minQuantity: 120,
+        },
+      });
+      priceItemCount += 1;
+    }
+  }
+
+  // Genel hacim iskontosu: 240 ana birim ve uzeri %3.
+  discountCount += await upsertDiscount({
+    tenantId,
+    key: 'GLOBAL-VOLUME-240',
+    scope: DiscountScope.GLOBAL,
+    kind: DiscountKind.LINE_VOLUME,
+    minQuantity: 240,
+    ratePercent: 3,
+    chainOrder: 1,
+  });
+
+  // Otel carisine ozel zincirli dip iskonto: %5 + %2 (art arda, kalan tutara).
+  const hotelCompanyId = companies.get('OTEL');
+
+  if (hotelCompanyId) {
+    discountCount += await upsertDiscount({
+      tenantId,
+      key: 'OTEL-CHAIN-1',
+      scope: DiscountScope.COMPANY,
+      kind: DiscountKind.FOOTER_CHAIN,
+      companyId: hotelCompanyId,
+      minQuantity: 0,
+      ratePercent: 5,
+      chainOrder: 1,
+      logoDiscountCode: 'IND-SOZLESME',
+    });
+    discountCount += await upsertDiscount({
+      tenantId,
+      key: 'OTEL-CHAIN-2',
+      scope: DiscountScope.COMPANY,
+      kind: DiscountKind.FOOTER_CHAIN,
+      companyId: hotelCompanyId,
+      minQuantity: 0,
+      ratePercent: 2,
+      chainOrder: 2,
+      logoDiscountCode: 'IND-CIRO',
+    });
+  }
+
+  return { productCount: PRODUCT_SPECS.length, priceItemCount, discountCount };
+}
+
+/**
+ * Iskonto kuralinda dogal bir benzersizlik anahtari yoktur; tekrar
+ * calistirmaya dayanikli olmasi icin `logoDiscountCode` ve kapsam uzerinden
+ * aranir, yoksa olusturulur.
+ */
+async function upsertDiscount(input: {
+  tenantId: string;
+  key: string;
+  scope: DiscountScope;
+  kind: DiscountKind;
+  companyId?: string;
+  minQuantity: number;
+  ratePercent: number;
+  chainOrder: number;
+  logoDiscountCode?: string;
+}): Promise<number> {
+  const existing = await prisma.discountRule.findFirst({
+    where: {
+      tenantId: input.tenantId,
+      scope: input.scope,
+      kind: input.kind,
+      companyId: input.companyId ?? null,
+      chainOrder: input.chainOrder,
+      ratePercent: input.ratePercent,
+    },
+    select: { id: true },
+  });
+
+  if (existing) return 0;
+
+  await prisma.discountRule.create({
+    data: {
+      tenantId: input.tenantId,
+      scope: input.scope,
+      kind: input.kind,
+      companyId: input.companyId ?? null,
+      minQuantity: input.minQuantity,
+      ratePercent: input.ratePercent,
+      chainOrder: input.chainOrder,
+      logoDiscountCode: input.logoDiscountCode ?? null,
+    },
+  });
+
+  return 1;
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 main()

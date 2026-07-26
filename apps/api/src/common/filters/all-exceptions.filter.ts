@@ -46,6 +46,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
       body.details = resolved.details;
     }
 
+    if (resolved.context) {
+      body.context = resolved.context;
+    }
+
     const logLine =
       `${request.method} ${request.originalUrl} -> ${resolved.status} ${resolved.code} ` +
       `[requestId=${requestId}] [ip=${context?.ip ?? '-'}] ` +
@@ -71,6 +75,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     code: ErrorCode;
     message: string;
     details?: Record<string, string[]>;
+    context?: Record<string, unknown>;
     internalMessage: string;
   } {
     if (exception instanceof ApiException) {
@@ -80,6 +85,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         code: exception.code,
         message: payload.message ?? ERROR_MESSAGES[exception.code],
         details: exception.details,
+        context: exception.context,
         internalMessage: payload.message ?? exception.code,
       };
     }

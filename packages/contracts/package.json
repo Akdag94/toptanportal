@@ -7,9 +7,10 @@
   "types": "dist/index.d.ts",
   "files": ["dist"],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "dev": "tsc -p tsconfig.json --watch",
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
     "clean": "rimraf dist",
+    "lint": "eslint \"src/**/*.ts\" --max-warnings 0",
     "test": "vitest run"
   },
   "dependencies": {

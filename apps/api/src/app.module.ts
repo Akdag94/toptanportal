@@ -27,8 +27,15 @@ import { IpWhitelistGuard } from './common/guards/ip-whitelist.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { RateLimitGuard } from './common/guards/rate-limit.guard';
+import { IdempotencyModule } from './common/idempotency/idempotency.module';
+import { OutboxModule } from './common/outbox/outbox.module';
 import { AuthModule } from './auth/auth.module';
+import { CartModule } from './cart/cart.module';
+import { CatalogModule } from './catalog/catalog.module';
 import { HealthModule } from './health/health.module';
+import { OrdersModule } from './orders/orders.module';
+import { PricingModule } from './pricing/pricing.module';
+import { StockModule } from './stock/stock.module';
 
 @Module({
   imports: [
@@ -41,8 +48,15 @@ import { HealthModule } from './health/health.module';
     RedisModule,
     CryptoModule,
     AuditModule,
+    OutboxModule,
+    IdempotencyModule,
     AuthModule,
     HealthModule,
+    PricingModule,
+    StockModule,
+    CatalogModule,
+    CartModule,
+    OrdersModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

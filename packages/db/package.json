@@ -9,6 +9,7 @@
   "scripts": {
     "generate": "prisma generate",
     "build": "prisma generate && tsc -p tsconfig.json",
+    "lint": "eslint \"src/**/*.ts\" --max-warnings 0",
     "migrate:dev": "dotenv -e ../../.env -- prisma migrate dev && pnpm harden",
     "migrate:deploy": "dotenv -e ../../.env -- prisma migrate deploy && pnpm harden",
     "harden": "dotenv -e ../../.env -- ts-node --transpile-only src/scripts/harden.ts",

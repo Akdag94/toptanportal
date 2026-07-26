@@ -121,6 +121,13 @@ model Tenant {
   outboxEvents     OutboxEvent[]
   idempotencyKeys  IdempotencyKey[]
   loginAttempts    LoginAttempt[]
+  warehouses       Warehouse[]
+  products         Product[]
+  priceLists       PriceList[]
+  discountRules    DiscountRule[]
+  carts            Cart[]
+  orders           Order[]
+  orderTemplates   OrderTemplate[]
 
   @@map("tenants")
 }
@@ -176,6 +183,10 @@ model Company {
   users            User[]
   salesRepLinks    SalesRepAssignment[]
   consentRecords   ConsentRecord[]
+  carts            Cart[]
+  orders           Order[]
+  orderTemplates   OrderTemplate[]
+  discountRules    DiscountRule[]
 
   @@unique([tenantId, logoCariCode])
   @@index([tenantId, isActive])
@@ -241,6 +252,10 @@ model User {
   spendingLimit     UserSpendingLimit?
   salesRepAssignments SalesRepAssignment[]
   consentRecords    ConsentRecord[]
+  carts             Cart[]
+  createdOrders     Order[]             @relation("OrderCreatedBy")
+  approvedOrders    Order[]             @relation("OrderApprovedBy")
+  orderTemplates    OrderTemplate[]
 
   @@unique([tenantId, emailNormalized])
   @@index([tenantId, role, status])
@@ -566,4 +581,599 @@ model IdempotencyKey {
   @@index([expiresAt])
   @@index([userId, endpoint])
   @@map("idempotency_keys")
+}
+
+// ---------------------------------------------------------------------------
+// KATALOG - Logo stok kartlarinin portal karsiligi
+// ---------------------------------------------------------------------------
+
+enum ProductStatus {
+  /// Logo'dan yeni geldi; admin gorsel ekleyip yayina almadi.
+  DRAFT
+  PUBLISHED
+  /// Katalogda gorunmez ama gecmis siparislerde referans olarak kalir.
+  ARCHIVED
+}
+
+enum DiscountScope {
+  /// Tum cariler icin gecerli hacim iskontosu
+  GLOBAL
+  /// Belirli bir cariye ozel
+  COMPANY
+  /// Belirli bir fiyat listesine bagli
+  PRICE_LIST
+}
+
+enum DiscountKind {
+  /// Satir bazli hacim iskontosu (10 koli uzeri %5)
+  LINE_VOLUME
+  /// Cariye ozel zincirli dip iskonto (%10 + %5 + %2)
+  FOOTER_CHAIN
+}
+
+enum ReservationStatus {
+  /// Portal tarafinda tutuluyor, Logo'ya henuz yazilmadi
+  HELD
+  /// Logo'da siparis fisi acildi, rezerv Logo tarafina gecti
+  SYNCED
+  /// Suresi doldu veya siparis iptal edildi
+  RELEASED
+}
+
+enum OrderStatus {
+  /// Alt yetkili gonderdi, ana yetkili onayi bekleniyor
+  PENDING_APPROVAL
+  /// Onaylandi, Logo'ya iletilmeyi bekliyor
+  QUEUED
+  /// Kopruye gonderildi, yanit bekleniyor
+  SENDING
+  /// Logo'da siparis fisi olustu
+  CONFIRMED
+  /// Ana yetkili reddetti
+  REJECTED
+  /// Kullanici veya admin iptal etti
+  CANCELLED
+  /// Azami deneme sayisi asildi; manuel mudahale gerekir
+  FAILED
+}
+
+enum OrderChannel {
+  WEB
+  IOS
+  /// Plasiyer bayi adina girdi
+  SALES_REP
+  /// Excel / CSV toplu yukleme
+  BULK_IMPORT
+  /// Rutin siparis sablonundan
+  TEMPLATE
+}
+
+/// Logo ambar tanimi. Siparis satirlari bir ambardan karsilanir.
+model Warehouse {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Logo ambar numarasi (INVDEF.NR)
+  logoWarehouseNo Int
+  name            String  @db.VarChar(120)
+  city            String? @db.VarChar(64)
+  isDefault       Boolean @default(false)
+  isActive        Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  stockSnapshots StockSnapshot[]
+  reservations   StockReservation[]
+  orders         Order[]
+
+  @@unique([tenantId, logoWarehouseNo])
+  @@map("warehouses")
+}
+
+model Product {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Logo stok kodu (ITEMS.CODE) - senkronizasyonun anahtari
+  logoItemCode String @db.VarChar(48)
+  logoItemRef  Int?
+
+  name        String  @db.VarChar(240)
+  description String? @db.VarChar(2000)
+  brand       String? @db.VarChar(80)
+  categoryPath String? @db.VarChar(240)
+  imageUrl    String? @db.VarChar(500)
+
+  /// Logo'daki 1. birim (ana birim) - tum stok bu birimde tutulur
+  baseUnitCode String @db.VarChar(24)
+  baseUnitName String @db.VarChar(48)
+
+  vatRate Decimal @default(20) @db.Decimal(5, 2)
+
+  /// Bu esigin altinda "Kritik Stok" gosterilir. Kor Siparis Modunda
+  /// sayisal miktar degil, yalnizca bu nitel durum gorunur.
+  criticalStockThreshold Decimal @default(0) @db.Decimal(18, 4)
+
+  /// Siparis edilebilecek en kucuk/en buyuk miktar (ana birimde)
+  minOrderQuantity Decimal  @default(0) @db.Decimal(18, 4)
+  maxOrderQuantity Decimal? @db.Decimal(18, 4)
+
+  status    ProductStatus @default(DRAFT)
+  sortOrder Int           @default(0)
+
+  logoSyncedAt DateTime? @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
+
+  units          ProductUnit[]
+  barcodes       ProductBarcode[]
+  stockSnapshots StockSnapshot[]
+  priceListItems PriceListItem[]
+  discountRules  DiscountRule[]
+  reservations   StockReservation[]
+  cartItems      CartItem[]
+  orderLines     OrderLine[]
+  templateItems  OrderTemplateItem[]
+
+  @@unique([tenantId, logoItemCode])
+  @@index([tenantId, status, sortOrder])
+  @@index([tenantId, categoryPath])
+  @@map("products")
+}
+
+/// Logo stok kartindaki 1./2./3. birim cevrimleri.
+/// Ornek: 1 Koli = 6 Paket = 36 Adet -> Koli icin factor = 36 (ana birim: Adet).
+model ProductUnit {
+  id        String  @id @default(uuid()) @db.Uuid
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  /// Logo birim seti satir referansi (UNITSETL.LOGICALREF)
+  logoUnitRef Int?
+  code String @db.VarChar(24)
+  name String @db.VarChar(48)
+
+  /// 1 bu birim = kac ana birim. Ana birimde 1'dir.
+  conversionFactor Decimal @db.Decimal(18, 6)
+  isBaseUnit       Boolean @default(false)
+  /// Katalogda varsayilan secili gelen birim (genelde Koli)
+  isDefaultForOrder Boolean @default(false)
+  sortOrder        Int     @default(0)
+  isActive         Boolean @default(true)
+
+  priceListItems PriceListItem[]
+  cartItems      CartItem[]
+  orderLines     OrderLine[]
+  templateItems  OrderTemplateItem[]
+  discountRules  DiscountRule[]
+
+  @@unique([productId, code])
+  @@index([productId, isActive])
+  @@map("product_units")
+}
+
+model ProductBarcode {
+  id        String  @id @default(uuid()) @db.Uuid
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  barcode String  @db.VarChar(48)
+  /// Barkod hangi birime ait (koli barkodu / adet barkodu)
+  unitCode String? @db.VarChar(24)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([productId, barcode])
+  @@index([barcode])
+  @@map("product_barcodes")
+}
+
+// ---------------------------------------------------------------------------
+// STOK - Logo anlik goruntusu + portal rezervasyon defteri
+// ---------------------------------------------------------------------------
+
+/// Logo'daki stok durumunun portal kopyasi. Diff servisi 1-3 dakikada bir gunceller.
+/// Siparis onayinda bu satir SELECT ... FOR UPDATE ile kilitlenir; es zamanli
+/// siparislerin ayni stogu iki kez satmasi boylece imkansiz hale gelir.
+model StockSnapshot {
+  id String @id @default(uuid()) @db.Uuid
+
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  warehouseId String    @db.Uuid
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  /// Ana birimde fiziki stok (Logo: ONHAND)
+  onHand Decimal @default(0) @db.Decimal(18, 4)
+  /// Logo tarafinda bekleyen siparis rezervleri (portal disi kanallar dahil)
+  logoReserved Decimal @default(0) @db.Decimal(18, 4)
+  /// Portal tarafinda tutulan, Logo'ya henuz yansimamis rezervlerin toplami.
+  /// Rezervasyon tablosuyla tutarliligi ReservationService korur.
+  portalReserved Decimal @default(0) @db.Decimal(18, 4)
+
+  logoSyncedAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([productId, warehouseId])
+  @@index([warehouseId])
+  @@map("stock_snapshots")
+}
+
+model StockReservation {
+  id String @id @default(uuid()) @db.Uuid
+
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  warehouseId String    @db.Uuid
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  orderId String @db.Uuid
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  /// Ana birimde rezerve edilen miktar
+  quantity Decimal           @db.Decimal(18, 4)
+  status   ReservationStatus @default(HELD)
+
+  /// Onay bekleyen siparislerde kisa, onaylananlarda uzun TTL.
+  /// Suresi dolan rezervasyonlar zamanlanmis gorevle serbest birakilir.
+  expiresAt  DateTime  @db.Timestamptz(6)
+  releasedAt DateTime? @db.Timestamptz(6)
+  syncedAt   DateTime? @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([orderId])
+  @@index([status, expiresAt])
+  @@index([productId, warehouseId, status])
+  @@map("stock_reservations")
+}
+
+// ---------------------------------------------------------------------------
+// FIYATLANDIRMA - matris fiyat + kademeli ve zincirli iskontolar
+// ---------------------------------------------------------------------------
+
+model PriceList {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Logo fiyat kartlarindaki liste numarasi
+  logoPriceListNo Int
+  name            String  @db.VarChar(120)
+  currency        String  @default("TRY") @db.VarChar(3)
+  /// Fiyatlar KDV dahil mi girilmis
+  vatIncluded Boolean @default(false)
+  /// Hicbir cariye ozel liste yoksa kullanilan liste
+  isDefault Boolean @default(false)
+  isActive  Boolean @default(true)
+
+  validFrom DateTime? @db.Timestamptz(6)
+  validTo   DateTime? @db.Timestamptz(6)
+
+  logoSyncedAt DateTime? @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
+
+  items         PriceListItem[]
+  discountRules DiscountRule[]
+
+  @@unique([tenantId, logoPriceListNo])
+  @@index([tenantId, isActive])
+  @@map("price_lists")
+}
+
+model PriceListItem {
+  id String @id @default(uuid()) @db.Uuid
+
+  priceListId String    @db.Uuid
+  priceList   PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  /// Fiyatin tanimlandigi birim. Null ise ana birim kabul edilir ve diger
+  /// birimlerin fiyati cevrim katsayisiyla hesaplanir.
+  unitId String?      @db.Uuid
+  unit   ProductUnit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
+
+  /// Vergi haric birim fiyat
+  price Decimal @db.Decimal(18, 6)
+  /// Bu fiyatin gecerli oldugu asgari miktar (Logo kademeli fiyat karti)
+  minQuantity Decimal @default(0) @db.Decimal(18, 4)
+
+  validFrom DateTime? @db.Timestamptz(6)
+  validTo   DateTime? @db.Timestamptz(6)
+
+  logoSyncedAt DateTime? @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([priceListId, productId, unitId, minQuantity])
+  @@index([productId])
+  @@map("price_list_items")
+}
+
+/// Hem hacim iskontolarini (10 koli uzeri %5) hem cariye ozel zincirli dip
+/// iskontolari (%10 + %5 + %2) tasir. Zincirli iskontolarda `chainOrder`
+/// uygulama sirasini belirler; her kademe bir onceki sonrasinda kalan tutara
+/// uygulanir ve Logo siparis fisine AYRI indirim satiri olarak yazilir.
+model DiscountRule {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  scope DiscountScope
+  kind  DiscountKind
+
+  companyId String?  @db.Uuid
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  priceListId String?    @db.Uuid
+  priceList   PriceList? @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+
+  productId String?  @db.Uuid
+  product   Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  unitId String?      @db.Uuid
+  unit   ProductUnit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
+
+  /// LINE_VOLUME icin: bu miktar ve uzeri
+  minQuantity Decimal @default(0) @db.Decimal(18, 4)
+  /// Yuzde iskonto orani (5 = %5)
+  ratePercent Decimal @db.Decimal(6, 3)
+  /// Zincirli iskontoda uygulama sirasi (1, 2, 3...)
+  chainOrder Int @default(1)
+
+  /// Logo'daki indirim kartinin kodu - fise yazarken referans verilir
+  logoDiscountCode String? @db.VarChar(48)
+
+  validFrom DateTime? @db.Timestamptz(6)
+  validTo   DateTime? @db.Timestamptz(6)
+  isActive  Boolean   @default(true)
+
+  logoSyncedAt DateTime? @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@index([tenantId, scope, isActive])
+  @@index([companyId, isActive])
+  @@index([productId, minQuantity])
+  @@map("discount_rules")
+}
+
+// ---------------------------------------------------------------------------
+// SEPET
+// ---------------------------------------------------------------------------
+
+/// Kullanici + cari basina tek acik sepet. Cevrimdisi depo modunda iOS
+/// tarafinda biriken satirlar baglanti gelince buraya senkronize edilir.
+model Cart {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  companyId String  @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  note      String? @db.VarChar(500)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  items CartItem[]
+
+  @@unique([userId, companyId])
+  @@index([tenantId, updatedAt])
+  @@map("carts")
+}
+
+model CartItem {
+  id     String @id @default(uuid()) @db.Uuid
+  cartId String @db.Uuid
+  cart   Cart   @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  unitId String      @db.Uuid
+  unit   ProductUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+
+  /// Kullanicinin sectigi birimdeki miktar
+  quantity Decimal @db.Decimal(18, 4)
+  note     String? @db.VarChar(240)
+
+  addedAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([cartId, productId, unitId])
+  @@index([cartId])
+  @@map("cart_items")
+}
+
+// ---------------------------------------------------------------------------
+// SIPARIS
+// ---------------------------------------------------------------------------
+
+model Order {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  companyId String  @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  warehouseId String    @db.Uuid
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  /// Portal siparis numarasi (kiraci icinde benzersiz, insan okunur)
+  orderNumber String @db.VarChar(24)
+
+  createdByUserId String @db.Uuid
+  createdBy       User   @relation("OrderCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  approvedByUserId String? @db.Uuid
+  approvedBy       User?   @relation("OrderApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+
+  /// Plasiyer bayi adina girdiyse dolu gelir
+  onBehalfOfSalesRepId String? @db.Uuid
+
+  status  OrderStatus  @default(QUEUED)
+  channel OrderChannel
+
+  /// Tutarlar KDV haric hesaplanir; vergi ayri tutulur.
+  grossTotal    Decimal @default(0) @db.Decimal(18, 4)
+  discountTotal Decimal @default(0) @db.Decimal(18, 4)
+  netTotal      Decimal @default(0) @db.Decimal(18, 4)
+  vatTotal      Decimal @default(0) @db.Decimal(18, 4)
+  grandTotal    Decimal @default(0) @db.Decimal(18, 4)
+  currency      String  @default("TRY") @db.VarChar(3)
+
+  /// Fiyatlandirmanin hangi listeye gore yapildigi - sonradan ispat icin
+  priceListId   String? @db.Uuid
+  priceListName String? @db.VarChar(120)
+
+  customerNote String? @db.VarChar(500)
+  rejectReason String? @db.VarChar(500)
+
+  /// Logo'da olusan siparis fisi
+  logoOrderNumber String? @db.VarChar(32)
+  logoOrderRef    Int?
+  logoError       String? @db.VarChar(1000)
+  sentToLogoAt    DateTime? @db.Timestamptz(6)
+  confirmedAt     DateTime? @db.Timestamptz(6)
+
+  requestedDeliveryDate DateTime? @db.Date
+
+  submittedAt DateTime  @default(now()) @db.Timestamptz(6)
+  approvedAt  DateTime? @db.Timestamptz(6)
+  cancelledAt DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  lines         OrderLine[]
+  reservations  StockReservation[]
+  statusHistory OrderStatusHistory[]
+
+  @@unique([tenantId, orderNumber])
+  @@index([companyId, status, createdAt])
+  @@index([createdByUserId, createdAt])
+  @@index([tenantId, status, createdAt])
+  @@map("orders")
+}
+
+model OrderLine {
+  id      String @id @default(uuid()) @db.Uuid
+  orderId String @db.Uuid
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  lineNumber Int
+
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  unitId String      @db.Uuid
+  unit   ProductUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+
+  /// Siparis anindaki degerler kopyalanir; urun karti sonradan degisse de
+  /// siparis belgesi degismez (ticari ispat gerekliligi).
+  productCode String @db.VarChar(48)
+  productName String @db.VarChar(240)
+  unitCode    String @db.VarChar(24)
+
+  /// Secilen birimdeki miktar
+  quantity Decimal @db.Decimal(18, 4)
+  /// 1 secili birim = kac ana birim
+  conversionFactor Decimal @db.Decimal(18, 6)
+  /// Ana birime cevrilmis miktar - stok rezervasyonu bu deger uzerinden yapilir
+  baseQuantity Decimal @db.Decimal(18, 4)
+
+  unitPrice     Decimal @db.Decimal(18, 6)
+  grossAmount   Decimal @db.Decimal(18, 4)
+  discountTotal Decimal @default(0) @db.Decimal(18, 4)
+  netAmount     Decimal @db.Decimal(18, 4)
+  vatRate       Decimal @db.Decimal(5, 2)
+  vatAmount     Decimal @db.Decimal(18, 4)
+  lineTotal     Decimal @db.Decimal(18, 4)
+
+  /// Uygulanan iskontolarin dokumu. Logo fisine ayri indirim satirlari olarak
+  /// yazilir: [{ kind, ratePercent, amount, logoDiscountCode, chainOrder }]
+  appliedDiscounts Json @default("[]")
+
+  note String? @db.VarChar(240)
+
+  @@unique([orderId, lineNumber])
+  @@index([productId])
+  @@map("order_lines")
+}
+
+model OrderStatusHistory {
+  id      BigInt @id @default(autoincrement())
+  orderId String @db.Uuid
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  fromStatus OrderStatus?
+  toStatus   OrderStatus
+  reason     String?      @db.VarChar(500)
+
+  actorUserId String? @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([orderId, createdAt])
+  @@map("order_status_history")
+}
+
+// ---------------------------------------------------------------------------
+// RUTIN SIPARIS SABLONLARI - "10 Saniye Kurali"nin dayanagi
+// ---------------------------------------------------------------------------
+
+model OrderTemplate {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  companyId String  @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  /// Sablonu olusturan kullanici. Isletme genelinde paylasima acilabilir.
+  ownerUserId String @db.Uuid
+  owner       User   @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  name       String  @db.VarChar(120)
+  isShared   Boolean @default(false)
+  sortOrder  Int     @default(0)
+  lastUsedAt DateTime? @db.Timestamptz(6)
+  useCount   Int     @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  items OrderTemplateItem[]
+
+  @@unique([companyId, ownerUserId, name])
+  @@index([companyId, isShared])
+  @@map("order_templates")
+}
+
+model OrderTemplateItem {
+  id         String        @id @default(uuid()) @db.Uuid
+  templateId String        @db.Uuid
+  template   OrderTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  unitId String      @db.Uuid
+  unit   ProductUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+
+  quantity  Decimal @db.Decimal(18, 4)
+  sortOrder Int     @default(0)
+
+  @@unique([templateId, productId, unitId])
+  @@index([templateId])
+  @@map("order_template_items")
 }

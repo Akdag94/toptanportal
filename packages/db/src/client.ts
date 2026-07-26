@@ -5,7 +5,7 @@
  * global uzerinde tekil (singleton) tutulur.
  */
 
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient, type Prisma } from '@prisma/client';
 
 export type PrismaTransactionClient = Omit<
   PrismaClient,

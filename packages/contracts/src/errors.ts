@@ -36,6 +36,8 @@ export const ErrorCode = {
   IDEMPOTENCY_KEY_REUSED: 'IDEMPOTENCY_KEY_REUSED',
 
   // Ticari
+  PRODUCT_UNAVAILABLE: 'PRODUCT_UNAVAILABLE',
+  PRICE_NOT_DEFINED: 'PRICE_NOT_DEFINED',
   STOCK_INSUFFICIENT: 'STOCK_INSUFFICIENT',
   CREDIT_LIMIT_EXCEEDED: 'CREDIT_LIMIT_EXCEEDED',
   OVERDUE_INVOICE_BLOCK: 'OVERDUE_INVOICE_BLOCK',
@@ -58,6 +60,13 @@ export interface ApiErrorBody {
   message: string;
   /** Alan bazli dogrulama hatalari: { "email": ["Geçerli bir e-posta..."] } */
   details?: Record<string, string[]>;
+  /**
+   * Hataya ozgu, makine tarafindan islenebilir ek veri.
+   * Ornek: STOCK_INSUFFICIENT icin `{ shortages: StockShortage[] }` - istemci
+   * hangi satirin sorunlu oldugunu isaretleyebilsin diye. Serbest metin mesaji
+   * ayristirmak zorunda kalmaz.
+   */
+  context?: Record<string, unknown>;
   /** Destek talebi acilirken referans verilecek istek kimligi. */
   requestId: string;
   timestamp: string;
@@ -92,6 +101,9 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   RESOURCE_NOT_FOUND: 'Kayıt bulunamadı.',
   CONFLICT: 'İşlem mevcut durumla çakışıyor.',
   IDEMPOTENCY_KEY_REUSED: 'Bu istek daha önce işlenmiş.',
+  PRODUCT_UNAVAILABLE: 'Ürün şu anda sipariş verilebilir durumda değil.',
+  PRICE_NOT_DEFINED:
+    'Bu ürün için tarafınıza tanımlı bir fiyat bulunamadı. Lütfen satış temsilcinizle görüşün.',
   STOCK_INSUFFICIENT: 'Seçtiğiniz üründe yeterli stok bulunmamaktadır.',
   CREDIT_LIMIT_EXCEEDED:
     'Açık hesap kredi limitinizi aşıyorsunuz. Lütfen kredi kartı ile ödeme yapın veya bakiyenizi kapatın.',

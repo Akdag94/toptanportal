@@ -152,10 +152,10 @@ export function stripFinancialFields(
   }
 
   // Dongusel referans: ayni nesneye ikinci kez girme.
-  if (seen.has(value as object)) {
+  if (seen.has(value)) {
     return { value, strippedFields: [] };
   }
-  seen.add(value as object);
+  seen.add(value);
 
   if (Array.isArray(value)) {
     const stripped: string[] = [];
