@@ -392,6 +392,228 @@ a {
   font-size: 14px;
 }
 
+/* --- Sayfa basligi ve arac cubugu --- */
+
+.sayfa-baslik {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.sayfa-baslik h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+.sayfa-baslik p {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--metin-ikincil);
+}
+
+.arac-cubugu {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.arac-cubugu .alan-girdi {
+  height: 38px;
+  max-width: 320px;
+}
+
+.onay-etiket {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  color: var(--metin-ikincil);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* --- Liste --- */
+
+.liste {
+  background: var(--yuzey);
+  border: 1px solid var(--kenarlik);
+  border-radius: var(--yaricap);
+  overflow: hidden;
+}
+
+.liste-satir {
+  display: grid;
+  grid-template-columns: minmax(220px, 2.4fr) 130px 150px 1fr;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--kenarlik);
+}
+
+.liste-satir:last-child {
+  border-bottom: none;
+}
+
+.liste-satir.baslik {
+  background: var(--yuzey-ikincil);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--metin-ikincil);
+  padding: 10px 16px;
+}
+
+.urun-ad {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 2px;
+}
+
+.urun-alt {
+  font-size: 12.5px;
+  color: var(--metin-ikincil);
+  margin: 0;
+}
+
+.fiyat {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.fiyat-alt {
+  font-size: 12px;
+  color: var(--metin-ikincil);
+}
+
+.satir-eylem {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.secim,
+.miktar-girdi {
+  height: 36px;
+  border: 1px solid var(--kenarlik);
+  border-radius: 8px;
+  background: var(--yuzey);
+  color: var(--metin);
+  padding: 0 10px;
+  font-size: 13.5px;
+  font-family: inherit;
+}
+
+.miktar-girdi {
+  width: 78px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.secim:focus,
+.miktar-girdi:focus {
+  outline: 2px solid var(--vurgu);
+  outline-offset: -1px;
+}
+
+.dugme-kucuk {
+  height: 36px;
+  padding: 0 14px;
+  width: auto;
+  font-size: 13.5px;
+}
+
+/* --- Stok durumu --- */
+
+.stok {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.stok::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.stok.var {
+  color: var(--basari);
+}
+
+.stok.kritik {
+  color: var(--uyari);
+}
+
+.stok.yok {
+  color: var(--hata);
+}
+
+/* --- Toplamlar --- */
+
+.toplam-kutu {
+  background: var(--yuzey);
+  border: 1px solid var(--kenarlik);
+  border-radius: var(--yaricap);
+  padding: 16px 18px;
+  min-width: 280px;
+}
+
+.toplam-satir {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  font-size: 13.5px;
+  padding: 5px 0;
+  color: var(--metin-ikincil);
+}
+
+.toplam-satir.genel {
+  border-top: 1px solid var(--kenarlik);
+  margin-top: 6px;
+  padding-top: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--metin);
+}
+
+.toplam-satir span:last-child {
+  font-variant-numeric: tabular-nums;
+}
+
+.bos-durum {
+  background: var(--yuzey);
+  border: 1px dashed var(--kenarlik);
+  border-radius: var(--yaricap);
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--metin-ikincil);
+  font-size: 14px;
+}
+
+.iskonto-etiket {
+  display: inline-block;
+  font-size: 11.5px;
+  color: var(--basari);
+  background: var(--basari-yumusak);
+  border-radius: 5px;
+  padding: 1px 6px;
+  margin-top: 3px;
+}
+
 @media (max-width: 860px) {
   .kabuk {
     grid-template-columns: 1fr;
@@ -404,5 +626,18 @@ a {
 
   .icerik {
     padding: 20px 16px;
+  }
+
+  .liste-satir {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .liste-satir.baslik {
+    display: none;
+  }
+
+  .satir-eylem {
+    justify-content: flex-start;
   }
 }
