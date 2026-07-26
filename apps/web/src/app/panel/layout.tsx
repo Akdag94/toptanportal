@@ -168,11 +168,9 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
     <div className="kabuk">
       <nav className="yan-menu" aria-label="Ana menü">
         <div>
-          <h1 className="marka" style={{ padding: '0 10px 12px' }}>
-            ToptanPortal
-          </h1>
+          <h1 className="marka">ToptanPortal</h1>
           {gruplar.map((grup) => (
-            <section key={grup.baslik} style={{ marginBottom: 18 }}>
+            <section key={grup.baslik}>
               <h2 className="yan-menu-baslik">{grup.baslik}</h2>
               <ul className="menu-liste">
                 {grup.ogeler.map((oge) => (
@@ -216,9 +214,8 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
               </div>
             </div>
             <button
-              className="dugme dugme-ikincil"
+              className="dugme dugme-ikincil dugme-kucuk"
               type="button"
-              style={{ width: 'auto', padding: '0 14px', height: 36 }}
               onClick={() => {
                 void signOut(false).then(() => router.replace('/giris'));
               }}

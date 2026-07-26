@@ -69,16 +69,18 @@ export default function PanelAnasayfa() {
 
   return (
     <div>
-      <h2 style={{ margin: '0 0 4px', fontSize: 22, letterSpacing: '-0.02em' }}>
-        Hoş geldiniz, {user.fullName.split(' ')[0]}
-      </h2>
-      <p style={{ margin: '0 0 24px', color: 'var(--metin-ikincil)', fontSize: 14 }}>
-        {ROLE_LABELS[user.role]}
-        {user.companyTitle ? ` · ${user.companyTitle}` : ''}
-      </p>
+      <div className="sayfa-baslik">
+        <div>
+          <h2>Hoş geldiniz, {user.fullName.split(' ')[0]}</h2>
+          <p>
+            {ROLE_LABELS[user.role]}
+            {user.companyTitle ? ` · ${user.companyTitle}` : ''}
+          </p>
+        </div>
+      </div>
 
       {user.blindOrderMode && (
-        <div className="uyari-kutu dikkat" style={{ maxWidth: 720 }}>
+        <div className="uyari-kutu dikkat">
           Hesabınız sipariş oluşturma yetkisine sahiptir. Fiyat, iskonto, fatura ve cari
           borç bilgileri bu hesapta gösterilmez; oluşturduğunuz sipariş işletme
           yetkilinizin onayına gönderilir.
@@ -86,7 +88,7 @@ export default function PanelAnasayfa() {
       )}
 
       {user.role === UserRole.BUSINESS_ACCOUNTANT && (
-        <div className="uyari-kutu bilgi" style={{ maxWidth: 720 }}>
+        <div className="uyari-kutu bilgi">
           Muhasebe hesabınızla sipariş oluşturulamaz. Evrak, ekstre ve ödeme işlemlerine
           erişebilirsiniz.
         </div>

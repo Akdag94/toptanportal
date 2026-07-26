@@ -14,7 +14,7 @@
  * tek kullanimlik bir jetona baglidir.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { LoginResponse, SessionUser, TokenPair } from '@toptanportal/contracts';
 

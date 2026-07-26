@@ -191,7 +191,7 @@ export default function OnaylarSayfasi() {
                   </button>
                   <input
                     className="alan-girdi"
-                    style={{ height: 36, flex: '1 1 240px' }}
+                    style={{ minHeight: 40, flex: '1 1 240px' }}
                     type="text"
                     maxLength={500}
                     placeholder="Ret gerekçesi"
