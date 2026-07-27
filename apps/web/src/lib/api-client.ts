@@ -15,7 +15,9 @@
  */
 
 import type {
+  AccountSummary,
   ActiveSession,
+  AgingReport,
   ApiErrorBody,
   ApplyTemplateResult,
   CartItemInput,
@@ -27,9 +29,15 @@ import type {
   OrderListQuery,
   OrderTemplateView,
   OrderView,
+  PaymentListQuery,
+  PaymentPage,
+  PaymentView,
   PlaceOrderRequest,
   PlaceOrderResult,
+  RecordPaymentRequest,
   SessionUser,
+  StatementPage,
+  StatementQuery,
   StockShortage,
   TokenPair,
 } from '@toptanportal/contracts';
@@ -426,6 +434,50 @@ export const templateApi = {
 
   remove: (templateId: string) =>
     request<void>(`/order-templates/${templateId}`, { method: 'DELETE' }),
+};
+
+// ---------------------------------------------------------------------------
+// Cari hesap ve tahsilat uc noktalari
+//
+// KOR SIPARIS NOTU: Bu uc noktalarin hicbiri alt yetkili hesapta CAGRILMAZ -
+// menu ve sayfalar BALANCE_VIEW / STATEMENT_VIEW yetkisi yoksa hic olusmaz.
+// Yine de bir cagri sizarsa sunucu 403 doner; arayuz bunu hata olarak gosterir,
+// bos veri uydurmaz.
+// ---------------------------------------------------------------------------
+
+export const financeApi = {
+  summary: (companyId?: string) =>
+    request<AccountSummary>(`/finance/summary${toQuery({ companyId })}`),
+
+  statement: (query: Partial<StatementQuery> = {}) =>
+    request<StatementPage>(`/finance/statement${toQuery({ ...query })}`),
+
+  aging: (companyId?: string) =>
+    request<AgingReport>(`/finance/aging${toQuery({ companyId })}`),
+
+  /**
+   * Idempotency-Key zorunlu: cift gonderim ikinci bir tahsilat kaydi ACMAZ.
+   * Tahsilat, cari bakiyeyi dogrudan degistirdigi icin siparisten daha az
+   * affedicidir - yanlislikla iki kez kaydedilen odeme mutabakati bozar.
+   */
+  recordPayment: (body: RecordPaymentRequest, idempotencyKey: string) =>
+    request<PaymentView>('/finance/payments', {
+      method: 'POST',
+      body,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    }),
+
+  payments: (query: Partial<PaymentListQuery> = {}) =>
+    request<PaymentPage>(`/finance/payments${toQuery({ ...query })}`),
+
+  confirmPayment: (paymentId: string) =>
+    request<PaymentView>(`/finance/payments/${paymentId}/confirm`, { method: 'POST' }),
+
+  cancelPayment: (paymentId: string, reason: string) =>
+    request<PaymentView>(`/finance/payments/${paymentId}/cancel`, {
+      method: 'POST',
+      body: { reason },
+    }),
 };
 
 export { emitSessionChange };
