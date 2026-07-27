@@ -23,9 +23,13 @@ import {
 
 import { financeApi } from '../../../lib/api-client';
 import { gun, para } from '../../../lib/bicim';
+import { ekstreCsv, ekstreDosyaAdi } from '../../../lib/ekstre-csv';
 import { YaslandirmaKarti } from '../../../components/yaslandirma-karti';
 
 const SAYFA_BOYU = 50;
+
+/** Disa aktarimda sunucunun izin verdigi en buyuk sayfa kullanilir. */
+const DISA_AKTARIM_BOYU = 200;
 
 interface Suzgec {
   from: string;
@@ -43,6 +47,7 @@ export default function EkstreSayfasi() {
   const [hareketler, setHareketler] = useState<AccountEntry[]>([]);
   const [yaslandirma, setYaslandirma] = useState<AgingReport | null>(null);
   const [yukleniyor, setYukleniyor] = useState(true);
+  const [disaAktariliyor, setDisaAktariliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
   const yukle = useCallback(
@@ -86,6 +91,54 @@ export default function EkstreSayfasi() {
       .catch(() => setYaslandirma(null));
   }, []);
 
+  /**
+   * Disa aktarim EKRANDAKI satirlari degil DONEMIN TAMAMINI indirir. Muhasebeci
+   * dosyayi mutabakat icin acar; "Daha Fazla Göster" dugmesine kac kez
+   * bastigina bagli bir ekstre, sessizce eksik bir mutabakat uretir.
+   */
+  async function disaAktar() {
+    setDisaAktariliyor(true);
+    setHata(null);
+
+    try {
+      const tumHareketler: AccountEntry[] = [];
+      let sonSayfa: StatementPage | null = null;
+
+      do {
+        const parca = await financeApi.statement({
+          from: uygulanan.from || undefined,
+          to: uygulanan.to || undefined,
+          kind: uygulanan.kind || undefined,
+          onlyOpen: uygulanan.onlyOpen || undefined,
+          offset: tumHareketler.length,
+          limit: DISA_AKTARIM_BOYU,
+        });
+
+        tumHareketler.push(...parca.entries);
+        sonSayfa = parca;
+
+        /* Bos yanit gelmesi durumunda dongu sonlanmali - aksi halde sunucu
+           bir kenar durumda sifir satir dondurdugunde burasi donerdi. */
+        if (parca.entries.length === 0) break;
+      } while (sonSayfa.hasMore && tumHareketler.length < sonSayfa.totalCount);
+
+      const tamEkstre: StatementPage = { ...sonSayfa, entries: tumHareketler };
+      const bag = document.createElement('a');
+      const adres = URL.createObjectURL(
+        new Blob([ekstreCsv(tamEkstre)], { type: 'text/csv;charset=utf-8' }),
+      );
+
+      bag.href = adres;
+      bag.download = ekstreDosyaAdi(tamEkstre);
+      bag.click();
+      URL.revokeObjectURL(adres);
+    } catch (error) {
+      setHata(error instanceof Error ? error.message : 'Ekstre dışa aktarılamadı.');
+    } finally {
+      setDisaAktariliyor(false);
+    }
+  }
+
   const acikBakiye = sayfa ? para(sayfa.openingBalance, sayfa.currency) : null;
   const kapanisBakiye = sayfa ? para(sayfa.closingBalance, sayfa.currency) : null;
   const borcToplam = sayfa ? para(sayfa.debitTotal, sayfa.currency) : null;
@@ -102,9 +155,19 @@ export default function EkstreSayfasi() {
               : 'Hareket dökümü hazırlanıyor…'}
           </p>
         </div>
-        <Link className="dugme dugme-ikincil dugme-kucuk" href="/panel/cari">
-          Cari Özeti
-        </Link>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="dugme dugme-kucuk"
+            disabled={disaAktariliyor || !sayfa || sayfa.totalCount === 0}
+            onClick={() => void disaAktar()}
+          >
+            {disaAktariliyor ? 'Hazırlanıyor…' : 'Excel (CSV) İndir'}
+          </button>
+          <Link className="dugme dugme-ikincil dugme-kucuk" href="/panel/cari">
+            Cari Özeti
+          </Link>
+        </div>
       </div>
 
       <form
