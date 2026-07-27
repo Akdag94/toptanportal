@@ -130,6 +130,8 @@ model Tenant {
   orderTemplates   OrderTemplate[]
   accountEntries   AccountEntry[]
   payments         Payment[]
+  syncCursors      SyncCursor[]
+  bridgeChecks     BridgeHealthCheck[]
 
   @@map("tenants")
 }
@@ -1341,4 +1343,82 @@ model PaymentAllocation {
   @@unique([paymentId, entryId])
   @@index([entryId])
   @@map("payment_allocations")
+}
+
+// ===========================================================================
+// Logo ERP entegrasyonu
+// ===========================================================================
+
+enum SyncChannel {
+  STOCK
+  PRICE
+  ACCOUNT
+  ORDER
+}
+
+/// Bir fark akisinin nerede kaldigi. Kiraci ve kanal basina TEK satirdir.
+///
+/// Imlec Logo tarafindaki degisiklik sirasidir, zaman damgasi DEGILDIR: iki
+/// sunucunun saati birkac saniye kaydiginda zaman damgasiyla ilerleyen bir
+/// akis, o araliktaki kayitlari sessizce atlar. Atlanan kayit fark akisinda
+/// bir daha gelmez - eksiklik ancak musteri "stok yanlis" dediginde fark edilir.
+model SyncCursor {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  channel SyncChannel
+
+  /// Kopruye bir sonraki istekte gonderilecek imlec. Bos ise bastan baslanir.
+  cursor String @default("") @db.VarChar(120)
+
+  /// Kanal kapatilirsa isleyici bu kanali atlar. Sorunlu bir akisi, tum
+  /// entegrasyonu durdurmadan susturabilmek icin gereklidir.
+  enabled Boolean @default(true)
+
+  lastSuccessAt DateTime? @db.Timestamptz(6)
+  lastAttemptAt DateTime? @db.Timestamptz(6)
+  lastError     String?   @db.VarChar(1000)
+  lastItemCount Int       @default(0)
+
+  /// Ardisik hata sayaci. Ilk basarili turda sifirlanir; esigi asinca
+  /// yonetim ekraninda uyari gosterilir.
+  consecutiveFailures Int @default(0)
+
+  /// Ayni kanalin iki isleyici tarafindan es zamanli calistirilmasini engeller.
+  lockedBy String?   @db.VarChar(64)
+  lockedAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([tenantId, channel])
+  @@map("sync_cursors")
+}
+
+/// Kopru saglik yoklamalarinin gecmisi.
+///
+/// Yalnizca son durumu tutmak yetmez: "dun gece 03:00-05:00 arasi Logo kapaliydi"
+/// sorusu, siparis gecikmesi tartisilirken sorulur ve tek satirlik bir durum
+/// alani bu soruyu cevaplayamaz. Kayitlar bakim gorevinde budanir.
+model BridgeHealthCheck {
+  id       BigInt @id @default(autoincrement())
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  status        String  @db.VarChar(16)
+  version       String? @db.VarChar(32)
+  logoServiceUp Boolean
+  databaseUp    Boolean
+  companyNumber Int?
+  periodNumber  Int?
+  message       String? @db.VarChar(500)
+
+  /// Yanit suresi - kopru "ayakta" ama yavaslamissa tek erken uyari budur.
+  latencyMs Int?
+
+  checkedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([tenantId, checkedAt])
+  @@map("bridge_health_checks")
 }
