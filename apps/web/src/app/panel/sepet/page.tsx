@@ -14,12 +14,21 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { StockStatus, type CartView, type PlaceOrderResult } from '@toptanportal/contracts';
+import {
+  Permission,
+  StockStatus,
+  type AccountSummary,
+  type CartView,
+  type PlaceOrderResult,
+} from '@toptanportal/contracts';
 
-import { ApiError, cartApi, orderApi, templateApi } from '../../../lib/api-client';
+import { ApiError, cartApi, financeApi, orderApi, templateApi } from '../../../lib/api-client';
 import { miktar, para, yuzde } from '../../../lib/bicim';
+import { useSession } from '../../../lib/session-context';
 
 export default function SepetSayfasi() {
+  const { user } = useSession();
+  const [risk, setRisk] = useState<AccountSummary | null>(null);
   const [sepet, setSepet] = useState<CartView | null>(null);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [islemde, setIslemde] = useState(false);
@@ -48,6 +57,21 @@ export default function SepetSayfasi() {
   useEffect(() => {
     void yukle();
   }, [yukle]);
+
+  /**
+   * Cari risk ozeti yalnizca BILGILENDIRME icin cekilir. "Siparişi Tamamla"
+   * dugmesi buna bakarak KILITLENMEZ: ozet birkac saniye once alinmistir ve
+   * arada yapilan bir tahsilat limiti serbest birakmis olabilir. Karari sunucu
+   * verir; arayuz kullaniciyi yalnizca olacaklara hazirlar.
+   */
+  useEffect(() => {
+    if (!user?.permissions.includes(Permission.BALANCE_VIEW)) return;
+
+    financeApi
+      .summary()
+      .then(setRisk)
+      .catch(() => setRisk(null));
+  }, [user]);
 
   async function calistir(islem: () => Promise<CartView>): Promise<void> {
     setIslemde(true);
@@ -189,6 +213,17 @@ export default function SepetSayfasi() {
       {sepet?.hasStockIssue && (
         <div className="uyari-kutu dikkat">
           Sepetinizde stoğu yetersiz satır var. Miktarı azaltın veya satırı çıkarın.
+        </div>
+      )}
+
+      {risk && !risk.canOrder && (
+        <div className="uyari-kutu hata">
+          <strong>Cari hesabınız sipariş girişine kapalı görünüyor.</strong>{' '}
+          {risk.isBlocked
+            ? (risk.blockReason ?? 'Ayrıntı için satış temsilcinizle görüşün.')
+            : 'Açık hesap limitiniz dolu.'}{' '}
+          Sepetiniz korunur; <Link href="/panel/odeme">ödeme bildirdiğinizde</Link> limit
+          anında serbest kalır.
         </div>
       )}
 
@@ -366,6 +401,19 @@ export default function SepetSayfasi() {
                     <span>Genel Toplam</span>
                     <span>{para(sepet.grandTotal, sepet.currency)}</span>
                   </div>
+
+                  {/* Limit satiri yalnizca hem limit hem tutar biliniyorsa cizilir;
+                      birini varsayip cikarmak, olmayan bir rakam uretir. */}
+                  {risk?.availableCredit !== null &&
+                    risk !== null &&
+                    typeof sepet.grandTotal === 'number' && (
+                      <div className="toplam-satir">
+                        <span>Sipariş sonrası kalan limit</span>
+                        <span>
+                          {para(risk.availableCredit - sepet.grandTotal, risk.currency)}
+                        </span>
+                      </div>
+                    )}
                 </>
               )}
 
