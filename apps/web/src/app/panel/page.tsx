@@ -5,8 +5,17 @@
  * finansal kart olusturulmaz.
  */
 
-import { Permission, ROLE_LABELS, UserRole } from '@toptanportal/contracts';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import {
+  Permission,
+  ROLE_LABELS,
+  UserRole,
+  type AccountSummary,
+} from '@toptanportal/contracts';
 
+import { financeApi } from '../../lib/api-client';
+import { para } from '../../lib/bicim';
 import { useSession } from '../../lib/session-context';
 
 interface Kart {
@@ -33,9 +42,10 @@ const KARTLAR: Kart[] = [
     gorunur: (yetkiler) => yetkiler.has(Permission.ORDER_APPROVE),
   },
   {
-    baslik: 'Cari Hesap Durumu',
-    aciklama: 'Güncel bakiye, kredi limiti ve vadesi yaklaşan borçlarınız.',
-    gorunur: (yetkiler) => yetkiler.has(Permission.BALANCE_VIEW),
+    baslik: 'Ekstre ve Yaşlandırma',
+    aciklama:
+      'Hareket dökümünüzü dönem seçerek görüntüleyin, mutabakat için Excel’e aktarın.',
+    gorunur: (yetkiler) => yetkiler.has(Permission.STATEMENT_VIEW),
   },
   {
     baslik: 'e-Fatura Arşivi',
@@ -59,6 +69,65 @@ const KARTLAR: Kart[] = [
     gorunur: (yetkiler) => yetkiler.has(Permission.AUDIT_LOG_VIEW),
   },
 ];
+
+/**
+ * Cari serit yalnizca BALANCE_VIEW yetkisiyle CEKILIR - Kor Siparis Modundaki
+ * hesapta istek hic olusturulmaz. Yuklenemezse serit sessizce gizlenir:
+ * anasayfada bir hata kutusu, kullanicinin yapabilecegi bir sey olmadigi halde
+ * gunu kotu baslatir; veri cari sayfasinda zaten yeniden denenir.
+ */
+function CariSerit() {
+  const [ozet, setOzet] = useState<AccountSummary | null>(null);
+
+  useEffect(() => {
+    financeApi
+      .summary()
+      .then(setOzet)
+      .catch(() => setOzet(null));
+  }, []);
+
+  if (!ozet) return null;
+
+  const borclu = ozet.balance > 0;
+
+  return (
+    <div className="olcum-izgara">
+      <article className="olcum">
+        <p className="olcum-etiket">{borclu ? 'Güncel Borcunuz' : 'Güncel Alacağınız'}</p>
+        <p className={`olcum-deger ${borclu ? 'borc' : 'alacak'}`}>
+          {para(Math.abs(ozet.balance), ozet.currency) ?? '—'}
+        </p>
+        <p className="olcum-alt">
+          <Link href="/panel/cari">Cari hesap ayrıntısı →</Link>
+        </p>
+      </article>
+
+      <article className="olcum">
+        <p className="olcum-etiket">Vadesi Geçmiş</p>
+        <p className={`olcum-deger ${ozet.overdueAmount > 0 ? 'gecikmis' : ''}`}>
+          {para(ozet.overdueAmount, ozet.currency) ?? '—'}
+        </p>
+        <p className="olcum-alt">
+          {ozet.overdueDays > 0 ? `${ozet.overdueDays} gün gecikme` : 'Gecikme yok'}
+        </p>
+      </article>
+
+      <article className="olcum">
+        <p className="olcum-etiket">Sipariş Durumu</p>
+        <p className={`olcum-deger ${ozet.canOrder ? 'alacak' : 'gecikmis'}`}>
+          {ozet.canOrder ? 'Açık' : 'Kapalı'}
+        </p>
+        <p className="olcum-alt">
+          {ozet.canOrder
+            ? ozet.availableCredit === null
+              ? 'Limit tanımsız'
+              : `Kullanılabilir limit: ${para(ozet.availableCredit, ozet.currency)}`
+            : (ozet.blockReason ?? 'Açık hesap limitiniz dolu.')}
+        </p>
+      </article>
+    </div>
+  );
+}
 
 export default function PanelAnasayfa() {
   const { user } = useSession();
@@ -93,6 +162,8 @@ export default function PanelAnasayfa() {
           erişebilirsiniz.
         </div>
       )}
+
+      {yetkiler.has(Permission.BALANCE_VIEW) && <CariSerit />}
 
       <div className="kart-izgara">
         {gorunurKartlar.map((kart) => (
