@@ -108,6 +108,17 @@ hash(n) = SHA256( hash(n-1) || "." || kanonikJSON(kayıt(n)) )
 - Şifreli metne anahtar kimliği gömülüdür; anahtar rotasyonunda eski kayıtlar yeniden şifrelenmeden okunur
 - Denetim kaydı `payload` alanı; şifre, jeton, TOTP anahtarı ve kart verisi gibi alanları yazmadan önce maskeler
 
+### Cari hesap, ekstre ve tahsilat
+
+- **Bakiye hareketlerden yeniden hesaplanır.** `companies` tablosundaki bakiye alanları yalnızca sipariş risk kalkanının hızlı okuması için tazelenen bir önbellektir; ekstre ve özet her zaman hareketlerden türetilir.
+- **Yürüyen bakiye SQL pencere fonksiyonuyla üretilir.** Uygulamada toplamak sayfalamayla bağdaşmaz: ikinci sayfa dönem başı devrini kaybeder ve sessizce yanlış bakiye gösterir.
+- **Yaşlandırma kova sınırları sabittir** (`Vadesi Gelmemiş`, `1-30`, `31-60`, `61-90`, `90+`) ve kiracı bazında değiştirilemez — muhasebe raporlaması karşılaştırılabilir kalmalıdır.
+- **Tahsilat yöntemi onay ihtiyacını belirler:** kredi kartı ve DBS doğrudan işlenir; nakit, çek ve senet fiziksel teslim gerektirdiği için `PENDING` doğar ve kaydı giren kişi kendi kaydını onaylayamaz.
+- **Dağıtım varsayılan olarak FIFO'dur:** vadesi en eski açık belgeden başlanır, dağıtılamayan kısım avans olarak kalır.
+- Ekstre `Excel (CSV) İndir` düğmesiyle dışa aktarılır. Dosya **noktalı virgülle** ayrılır ve **BOM** ile başlar (Türkçe Excel virgülü ondalık ayracı sayar, BOM'suz UTF-8'i yerel kod sayfasıyla okur); `=`, `+`, `-`, `@` ile başlayan hücreler formül enjeksiyonuna karşı etkisizleştirilir. Kurallar `apps/web/src/lib/ekstre-csv.spec.ts` ile kilitlenmiştir.
+
+Bu modülün hiçbir görünümü Kör Sipariş Modundaki kullanıcıya ulaşmaz: ilgili uç noktalar `BALANCE_VIEW` / `STATEMENT_VIEW` / `AGING_REPORT_VIEW` yetkisi ister ve alt yetkili rolünde bu yetkiler yoktur. Yanıt süzgeci burada ikinci savunma hattıdır.
+
 ---
 
 ## Bilinen ödünler
@@ -139,10 +150,12 @@ Tasarım ilkeleri: birincil eylemler ekranın alt şeridinde sabit durur (bir el
 
 ## Sıradaki modüller
 
-1. **Stok rezervasyonu ve sipariş motoru** — Redis önbelleği, milisaniyelik canlı rezervasyon, sıfır yok-satma kilidi, birim katsayı çevrimi, matris fiyat ve kademeli iskonto
-2. **Logo ERP entegrasyon katmanı** — on-prem köprü, mTLS tüneli, stok fark servisi, fiyat senkronu, cari ekstre
-3. **Finansal risk kalkanı ve tahsilat** — kredi limiti / yaşlanan borç blokajı, 3D Secure sanal POS, DBS
-4. **iOS 10 saniye akışı** — rutin sipariş şablonları, barkod tarama, çevrimdışı depo modu
+1. **Logo ERP entegrasyon katmanı** — on-prem köprü, mTLS tüneli, stok fark servisi, fiyat senkronu, cari ekstre aktarımı
+2. **3D Secure sanal POS ve DBS** — banka doğrudan borçlandırma dosyaları, kart ile anlık tahsilat
+3. **e-Fatura / e-İrsaliye arşivi** — 10 yıllık evrak erişimi, toplu indirme
+4. **iOS 10 saniye akışı** — barkod tarama, çevrimdışı depo modu, saha tahsilatı
+
+Tamamlananlar: stok rezervasyonu ve sipariş motoru, matris fiyat ve kademeli iskonto, cari hesap / ekstre / yaşlandırma, tahsilat kaydı ve sipariş risk kalkanı.
 
 Temel altyapı (`OutboxEvent`, `IdempotencyKey`, denetim zinciri) bu modüller için şemada hazırdır.
 
