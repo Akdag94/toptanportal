@@ -119,6 +119,8 @@ h3 {
 .liste,
 .toplam-kutu,
 .bos-durum,
+.olcum,
+.yaslandirma,
 .ust-cubuk {
   background: var(--yuzey);
   border: 1px solid var(--kenarlik);
@@ -799,6 +801,191 @@ h3 {
 }
 
 /* ---------------------------------------------------------------------------
+   Finans - olcum kartlari, yaslandirma ve ekstre
+
+   Tutarlar `font-variant-numeric: tabular-nums` ile hizalanir: muhasebeci
+   rakamlari alt alta karsilastirir, degisken genislikli rakam bu okumayi bozar.
+   --------------------------------------------------------------------------- */
+
+.olcum-izgara {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.olcum {
+  padding: 16px 18px;
+  box-shadow: var(--golge);
+}
+
+.olcum-etiket {
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--metin-ikincil);
+}
+
+.olcum-deger {
+  margin: 0;
+  font-size: 25px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.olcum-deger.borc {
+  color: var(--uyari);
+}
+
+.olcum-deger.alacak {
+  color: var(--basari);
+}
+
+.olcum-deger.gecikmis {
+  color: var(--hata);
+}
+
+.olcum-alt {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--metin-ikincil);
+}
+
+/* --- Yaslandirma kovalari --- */
+
+.yaslandirma {
+  padding: 18px 20px;
+  box-shadow: var(--golge);
+}
+
+.yaslandirma h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+}
+
+/* Kovalarin goreli agirligini gosteren tek satirlik yigin. Yuzde degeri
+   `flex-grow` ile verilir; sifir tutarli kova hic cizilmez. */
+.kova-serit {
+  display: flex;
+  gap: 3px;
+  height: 12px;
+  margin-bottom: 16px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.kova-dilim {
+  min-width: 4px;
+  border-radius: 999px;
+}
+
+.kova-dilim.k0 {
+  background: var(--vurgu);
+}
+
+.kova-dilim.k1 {
+  background: #a3e635;
+}
+
+.kova-dilim.k2 {
+  background: var(--uyari);
+}
+
+.kova-dilim.k3 {
+  background: #fb923c;
+}
+
+.kova-dilim.k4 {
+  background: var(--hata);
+}
+
+.kova-liste {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kova-satir {
+  display: grid;
+  grid-template-columns: 12px minmax(120px, 1fr) auto;
+  gap: 11px;
+  align-items: center;
+  font-size: 13.5px;
+}
+
+.kova-nokta {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.kova-tutar {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* --- Ekstre --- */
+
+.ekstre-satir {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.5fr) minmax(120px, 1.2fr) 118px 118px 132px;
+  gap: 14px;
+  align-items: center;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--kenarlik);
+  font-size: 13.5px;
+}
+
+.ekstre-satir:last-child {
+  border-bottom: none;
+}
+
+.ekstre-satir:not(.baslik):hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.ekstre-satir.baslik {
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--metin-ikincil);
+  padding: 11px 18px;
+}
+
+.ekstre-tutar {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.ekstre-tutar.yuruyen {
+  font-weight: 700;
+}
+
+.gecikme-rozeti {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--hata);
+  background: var(--hata-yumusak);
+  border: 1px solid rgba(251, 113, 133, 0.3);
+  border-radius: 999px;
+}
+
+/* ---------------------------------------------------------------------------
    Mobil
 
    Yan menu yatay kaydirilan seriye doner; grup basliklari gizlenir.
@@ -886,6 +1073,26 @@ h3 {
 
   .liste-satir.baslik {
     display: none;
+  }
+
+  /* Ekstre satiri iki sutuna duser: solda belge, sagda tutarlar. Yuruyen
+     bakiye mobilde de gorunur kalir - ekstrenin tek okunma sebebi odur. */
+  .ekstre-satir {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 14px 16px;
+  }
+
+  .ekstre-satir > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  .ekstre-satir.baslik {
+    display: none;
+  }
+
+  .olcum-deger {
+    font-size: 22px;
   }
 
   .satir-eylem {
