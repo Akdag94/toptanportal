@@ -884,23 +884,28 @@ h3 {
   border-radius: 999px;
 }
 
-.kova-dilim.k0 {
+.kova-dilim.k0,
+.kova-nokta.k0 {
   background: var(--vurgu);
 }
 
-.kova-dilim.k1 {
+.kova-dilim.k1,
+.kova-nokta.k1 {
   background: #a3e635;
 }
 
-.kova-dilim.k2 {
+.kova-dilim.k2,
+.kova-nokta.k2 {
   background: var(--uyari);
 }
 
-.kova-dilim.k3 {
+.kova-dilim.k3,
+.kova-nokta.k3 {
   background: #fb923c;
 }
 
-.kova-dilim.k4 {
+.kova-dilim.k4,
+.kova-nokta.k4 {
   background: var(--hata);
 }
 
