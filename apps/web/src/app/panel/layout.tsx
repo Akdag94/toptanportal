@@ -128,6 +128,12 @@ const MENU: MenuGrubu[] = [
         // kendi oturumlarini gorebilmelidir.
         yetkiler: [],
       },
+      {
+        baslik: 'Bildirim Tercihleri',
+        yol: '/panel/bildirimler',
+        // Herkese acik: hangi bildirimi alacagina kullanici karar verir.
+        yetkiler: [],
+      },
     ],
   },
   {
@@ -152,6 +158,11 @@ const MENU: MenuGrubu[] = [
         baslik: 'Denetim Kayıtları',
         yol: '/panel/denetim',
         yetkiler: [Permission.AUDIT_LOG_VIEW],
+      },
+      {
+        baslik: 'Bildirim Kaydı',
+        yol: '/panel/bildirim-kaydi',
+        yetkiler: [Permission.NOTIFICATION_LOG_VIEW],
       },
     ],
   },

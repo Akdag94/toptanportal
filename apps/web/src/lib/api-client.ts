@@ -52,6 +52,9 @@ import type {
   OrderView,
   PaymentListQuery,
   PaymentPage,
+  NotificationPage,
+  NotificationPreferences,
+  NotificationQuery,
   PaymentView,
   PlaceOrderRequest,
   PlaceOrderResult,
@@ -70,6 +73,7 @@ import type {
   StockShortage,
   SyncChannel,
   SyncRunResult,
+  UpdatePreferencesRequest,
   TokenPair,
   UpsertSalesTargetRequest,
   UserListQuery,
@@ -675,6 +679,29 @@ export const priceListApi = {
 
   items: (query: PriceListItemQuery) =>
     request<PriceListItemPage>(`/price-lists/items${toQuery({ ...query })}`),
+};
+
+// ---------------------------------------------------------------------------
+// Bildirimler
+//
+// Tercihler ve cihaz kaydi yetki istemez - herkes kendi tercihini yonetir.
+// Gonderim kaydi ise NOTIFICATION_LOG_VIEW ister; o kayit baskalarinin
+// adreslerini tasir.
+// ---------------------------------------------------------------------------
+
+export const notificationApi = {
+  preferences: () => request<NotificationPreferences>('/notifications/preferences'),
+
+  updatePreferences: (body: UpdatePreferencesRequest) =>
+    request<NotificationPreferences>('/notifications/preferences', { method: 'PUT', body }),
+
+  list: (query: Partial<NotificationQuery> = {}) =>
+    request<NotificationPage>(`/notifications${toQuery({ ...query })}`),
+
+  labels: () =>
+    request<{ topics: Record<string, string>; channels: Record<string, string> }>(
+      '/notifications/labels',
+    ),
 };
 
 export { emitSessionChange };
