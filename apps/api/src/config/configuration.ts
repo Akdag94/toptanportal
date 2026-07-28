@@ -85,6 +85,18 @@ const envSchema = z
     POS_CALLBACK_URL: z.string().url().optional(),
     POS_MAX_INSTALLMENT: z.coerce.number().int().min(1).max(12).default(6),
 
+    /**
+     * e-Belge arsivinin kok dizini. XML ve PDF dosyalari buraya yazilir;
+     * veritabani yalnizca goreli yolu tutar.
+     *
+     * Uretimde bu dizin AG DEPOSU veya nesne deposu baglamasi olmalidir:
+     * uygulama sunucusunun yerel diski, 10 yillik saklama yukumlulugunu
+     * tasiyacak dayaniklilikta degildir.
+     */
+    EDOCUMENT_STORAGE_PATH: z.string().min(1).default('./storage/e-documents'),
+    /** Imzali indirme baglantisinin omru. Kisa tutulur: baglanti paylasilabilir. */
+    EDOCUMENT_LINK_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
+
     LOGO_BRIDGE_BASE_URL: z.string().url().optional(),
     LOGO_BRIDGE_CLIENT_CERT_PATH: z.string().optional(),
     LOGO_BRIDGE_CLIENT_KEY_PATH: z.string().optional(),
