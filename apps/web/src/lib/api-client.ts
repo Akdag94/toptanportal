@@ -22,8 +22,11 @@ import type {
   ApplyTemplateResult,
   CartItemInput,
   CartView,
+  CardPaymentForm,
   CatalogPage,
   CatalogProduct,
+  DbsBatchView,
+  DbsImportResult,
   DeadEventView,
   ErrorCode,
   IntegrationStatus,
@@ -36,10 +39,12 @@ import type {
   PaymentView,
   PlaceOrderRequest,
   PlaceOrderResult,
+  PosTransactionView,
   RecordPaymentRequest,
   SessionUser,
   StatementPage,
   StatementQuery,
+  StartCardPaymentRequest,
   StockShortage,
   SyncChannel,
   SyncRunResult,
@@ -513,6 +518,37 @@ export const integrationApi = {
       `/integration/channels/toggle${toQuery({ channel, enabled })}`,
       { method: 'POST' },
     ),
+};
+
+// ---------------------------------------------------------------------------
+// Sanal POS ve DBS
+// ---------------------------------------------------------------------------
+
+export const posApi = {
+  /** Kart ile odeme acik mi - dugme buna gore cizilir. */
+  availability: () => request<{ enabled: boolean }>('/pos/availability'),
+
+  start: (body: StartCardPaymentRequest) =>
+    request<CardPaymentForm>('/pos/card-payments', { method: 'POST', body }),
+
+  get: (transactionId: string) =>
+    request<PosTransactionView>(`/pos/card-payments/${transactionId}`),
+};
+
+export const dbsApi = {
+  batches: () => request<DbsBatchView[]>('/dbs/batches'),
+
+  exportDebts: (dueUntil: string, bankCode: string) =>
+    request<{ content: string; fileName: string; batch: DbsBatchView }>(
+      `/dbs/export${toQuery({ dueUntil, bankCode })}`,
+      { method: 'POST' },
+    ),
+
+  importResults: (bankCode: string, fileName: string, content: string) =>
+    request<DbsImportResult>('/dbs/import', {
+      method: 'POST',
+      body: { bankCode, fileName, content },
+    }),
 };
 
 export { emitSessionChange };

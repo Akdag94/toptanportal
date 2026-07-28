@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   PAYMENT_METHOD_LABELS,
   PaymentMethod,
@@ -24,7 +25,7 @@ import {
   type PaymentView,
 } from '@toptanportal/contracts';
 
-import { ApiError, financeApi } from '../../../lib/api-client';
+import { ApiError, financeApi, posApi } from '../../../lib/api-client';
 import { para, tarihSaat } from '../../../lib/bicim';
 import { useSession } from '../../../lib/session-context';
 
@@ -57,6 +58,14 @@ export default function OdemeSayfasi() {
   const [hata, setHata] = useState<string | null>(null);
   const [bilgi, setBilgi] = useState<string | null>(null);
   const [iptalGerekceleri, setIptalGerekceleri] = useState<Record<string, string>>({});
+  const [kartAcik, setKartAcik] = useState(false);
+  const [taksit, setTaksit] = useState(1);
+  const [bankayaGidiliyor, setBankayaGidiliyor] = useState(false);
+
+  /* Bankadan donuste sonuc sorgu dizesinde gelir; kullanici bu sayfaya
+     yonlendirilir ve ne oldugunu OKUYARAK anlar. */
+  const sorgu = useSearchParams();
+  const donusSonucu = sorgu.get('sonuc');
 
   /* Anahtar yalnizca basarili kayittan SONRA tazelenir - basarisiz denemede
      ayni anahtarla tekrar denemek dogru davranistir. */
@@ -82,6 +91,18 @@ export default function OdemeSayfasi() {
   useEffect(() => {
     void listele();
   }, [listele]);
+
+  useEffect(() => {
+    /* Kart ile odeme yapilandirilmamissa dugme HIC cizilmez. Gorunen ama her
+       denemede hata veren bir dugme, kullaniciyi bankasini aramaya yoneltir. */
+    if (!yetkiler.has(Permission.PAYMENT_CREATE)) return;
+
+    posApi
+      .availability()
+      .then(({ enabled }) => setKartAcik(enabled))
+      .catch(() => setKartAcik(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   async function kaydet(olay: React.FormEvent) {
     olay.preventDefault();
@@ -170,6 +191,45 @@ export default function OdemeSayfasi() {
     }
   }
 
+  /**
+   * Kart ile odeme: sunucudan banka formunu alir ve tarayiciyi bankaya
+   * GONDERIR. Form alanlari gizli input olarak basilir; kart bilgisi bu
+   * sayfada HIC istenmez, kullanici kartini bankanin sayfasina girer.
+   */
+  async function kartIleOde() {
+    const sayisalTutar = Number(tutar.replace(',', '.'));
+
+    if (!Number.isFinite(sayisalTutar) || sayisalTutar <= 0) {
+      setHata('Tutar sıfırdan büyük bir sayı olmalıdır.');
+      return;
+    }
+
+    setHata(null);
+    setBankayaGidiliyor(true);
+
+    try {
+      const form = await posApi.start({ amount: sayisalTutar, installment: taksit });
+
+      const gizliForm = document.createElement('form');
+      gizliForm.method = 'POST';
+      gizliForm.action = form.actionUrl;
+
+      for (const [ad, deger] of Object.entries(form.fields)) {
+        const alan = document.createElement('input');
+        alan.type = 'hidden';
+        alan.name = ad;
+        alan.value = deger;
+        gizliForm.appendChild(alan);
+      }
+
+      document.body.appendChild(gizliForm);
+      gizliForm.submit();
+    } catch (error) {
+      setBankayaGidiliyor(false);
+      setHata(error instanceof Error ? error.message : 'Kart ile ödeme başlatılamadı.');
+    }
+  }
+
   const anindaIsler = SELF_CONFIRMING_METHODS.includes(yontem);
 
   return (
@@ -184,6 +244,27 @@ export default function OdemeSayfasi() {
           </p>
         </div>
       </div>
+
+      {donusSonucu === 'basarili' && (
+        <div className="uyari-kutu bilgi">
+          Kart ödemeniz alındı ve cari hesabınıza işlendi.
+        </div>
+      )}
+
+      {donusSonucu === 'hata' && (
+        <div className="uyari-kutu hata">
+          Kart ödemesi tamamlanamadı. Kartınızdan tutar çekilmediyse yeniden
+          deneyebilirsiniz.
+        </div>
+      )}
+
+      {donusSonucu === 'inceleme' && (
+        <div className="uyari-kutu dikkat">
+          <strong>Ödemeniz bankada onaylandı ancak hesabınıza işlenemedi.</strong> Kayıt
+          incelemeye alındı; <strong>yeniden ödeme yapmayın</strong>. Muhasebe sizinle
+          iletişime geçecektir.
+        </div>
+      )}
 
       {hata && <div className="uyari-kutu hata">{hata}</div>}
       {bilgi && <div className="uyari-kutu bilgi">{bilgi}</div>}
@@ -262,6 +343,42 @@ export default function OdemeSayfasi() {
           <button className="dugme" type="submit" disabled={kaydediliyor}>
             {kaydediliyor ? 'Kaydediliyor…' : 'Tahsilatı Kaydet'}
           </button>
+
+          {kartAcik && (
+            <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--kenarlik)' }}>
+              <p className="olcum-etiket">Kart ile Anında Öde</p>
+              <p className="urun-alt" style={{ marginBottom: 12 }}>
+                Yukarıdaki tutar için bankanızın 3D Secure sayfasına yönlendirilirsiniz.
+                Kart bilgileriniz portalde <strong>istenmez ve saklanmaz</strong>.
+              </p>
+
+              <label className="alan">
+                <span className="alan-etiket">Taksit</span>
+                <select
+                  className="secim"
+                  style={{ width: '100%' }}
+                  value={taksit}
+                  onChange={(olay) => setTaksit(Number(olay.target.value))}
+                >
+                  <option value={1}>Tek Çekim</option>
+                  {[2, 3, 6].map((adet) => (
+                    <option key={adet} value={adet}>
+                      {adet} Taksit
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <button
+                className="dugme dugme-ikincil"
+                type="button"
+                disabled={bankayaGidiliyor}
+                onClick={() => void kartIleOde()}
+              >
+                {bankayaGidiliyor ? 'Bankaya yönlendiriliyorsunuz…' : 'Kart ile Öde'}
+              </button>
+            </div>
+          )}
         </form>
       )}
 
