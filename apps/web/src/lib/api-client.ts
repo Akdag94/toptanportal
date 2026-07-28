@@ -22,8 +22,12 @@ import type {
   ApplyTemplateResult,
   CartItemInput,
   CartView,
+  AssignRepRequest,
   CardPaymentForm,
   CatalogPage,
+  CompanyListQuery,
+  CompanyPage,
+  CreateVisitNoteRequest,
   CatalogProduct,
   DbsBatchView,
   DbsImportResult,
@@ -49,11 +53,17 @@ import type {
   SessionUser,
   StatementPage,
   StatementQuery,
+  SalesTarget,
+  SalesTargetQuery,
   StartCardPaymentRequest,
   StockShortage,
   SyncChannel,
   SyncRunResult,
   TokenPair,
+  UpsertSalesTargetRequest,
+  VisitNote,
+  VisitNotePage,
+  VisitNoteQuery,
 } from '@toptanportal/contracts';
 
 import { getDeviceInfo } from './device';
@@ -573,6 +583,30 @@ export const eDocumentApi = {
    */
   link: (documentId: string, format: EDocumentFormat) =>
     request<EDocumentLink>(`/e-documents/${documentId}/link${toQuery({ format })}`),
+};
+
+// ---------------------------------------------------------------------------
+// Saha: portfoy, ziyaret, hedef
+// ---------------------------------------------------------------------------
+
+export const fieldApi = {
+  companies: (query: Partial<CompanyListQuery> = {}) =>
+    request<CompanyPage>(`/companies${toQuery({ ...query })}`),
+
+  assign: (body: AssignRepRequest) =>
+    request<{ affected: number }>('/companies/assignments', { method: 'POST', body }),
+
+  visits: (query: Partial<VisitNoteQuery> = {}) =>
+    request<VisitNotePage>(`/visits${toQuery({ ...query })}`),
+
+  createVisit: (body: CreateVisitNoteRequest) =>
+    request<VisitNote>('/visits', { method: 'POST', body }),
+
+  targets: (query: Partial<SalesTargetQuery> = {}) =>
+    request<SalesTarget[]>(`/sales-targets${toQuery({ ...query })}`),
+
+  upsertTarget: (body: UpsertSalesTargetRequest) =>
+    request<SalesTarget>('/sales-targets', { method: 'POST', body }),
 };
 
 export { emitSessionChange };
