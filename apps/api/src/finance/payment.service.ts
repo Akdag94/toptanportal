@@ -43,7 +43,7 @@ import { Decimal, money } from '../pricing/pricing.types';
 import { AccountService, parseDate, todayUtc, toIsoDate } from './account.service';
 import { allocateFifo, type Allocation } from './account-math';
 
-const PAYMENT_INCLUDE = {
+export const PAYMENT_INCLUDE = {
   company: { select: { title: true } },
   recordedBy: { select: { fullName: true } },
   allocations: {
@@ -56,7 +56,7 @@ const PAYMENT_INCLUDE = {
   },
 } satisfies Prisma.PaymentInclude;
 
-type PaymentRow = Prisma.PaymentGetPayload<{ include: typeof PAYMENT_INCLUDE }>;
+export type PaymentRow = Prisma.PaymentGetPayload<{ include: typeof PAYMENT_INCLUDE }>;
 
 @Injectable()
 export class PaymentService {
@@ -131,7 +131,7 @@ export class PaymentService {
           return created;
         }
 
-        return this.settle(tx, created, principal, request.allocations);
+        return this.settle(tx, created, request.allocations);
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 20000 },
     );
@@ -161,7 +161,7 @@ export class PaymentService {
     }
 
     const payment = await this.prisma.$transaction(
-      async (tx) => this.settle(tx, existing, principal),
+      async (tx) => this.settle(tx, existing),
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 20000 },
     );
 
@@ -214,10 +214,25 @@ export class PaymentService {
    * `openAmount` dusumu, risk onbellegi ve denetim kaydi yazilir. Herhangi biri
    * yazilamazsa tahsilat da onaylanmis sayilmaz.
    */
+  /**
+   * Sanal POS ve DBS gibi KULLANICISIZ akislar icin tahsilati kapatir.
+   *
+   * Bankadan donen bir sonucta oturum acmis bir kullanici yoktur; islemi
+   * baslatan kisi kaydin uzerinde `recordedByUserId` olarak zaten durur.
+   * Ayni kapama mantigini ikinci kez yazmak yerine buradan paylasilir -
+   * dagitim ve risk onbellegi kurallari tek yerde kalmalidir.
+   */
+  async settleExternal(
+    tx: PrismaTransactionClient,
+    payment: PaymentRow,
+    requested?: RecordPaymentRequest['allocations'],
+  ): Promise<PaymentRow> {
+    return this.settle(tx, payment, requested);
+  }
+
   private async settle(
     tx: PrismaTransactionClient,
     payment: PaymentRow,
-    principal: AuthenticatedPrincipal,
     requested?: RecordPaymentRequest['allocations'],
   ): Promise<PaymentRow> {
     const amount = new Decimal(payment.amount);
