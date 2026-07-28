@@ -117,6 +117,14 @@ hash(n) = SHA256( hash(n-1) || "." || kanonikJSON(kayıt(n)) )
 - **Dağıtım varsayılan olarak FIFO'dur:** vadesi en eski açık belgeden başlanır, dağıtılamayan kısım avans olarak kalır.
 - Ekstre `Excel (CSV) İndir` düğmesiyle dışa aktarılır. Dosya **noktalı virgülle** ayrılır ve **BOM** ile başlar (Türkçe Excel virgülü ondalık ayracı sayar, BOM'suz UTF-8'i yerel kod sayfasıyla okur); `=`, `+`, `-`, `@` ile başlayan hücreler formül enjeksiyonuna karşı etkisizleştirilir. Kurallar `apps/web/src/lib/ekstre-csv.spec.ts` ile kilitlenmiştir.
 
+### Saha yönetimi — portföy, ziyaret, hedef
+
+- **Plasiyer yalnızca kendisine atanmış bayileri görür.** Kapsam `SalesRepAssignment` üzerinden sunucuda çizilir; istemcinin gönderdiği hiçbir süzgeç kapsamı *genişletemez*. Portföy ticari bir sınırdır.
+- **Ziyaret notu silinemez ve metni değiştirilemez** (veritabanı tetikleyicisi). Bir şikâyet kaydının sonradan yok olması, müşteri ilişkisinin geçmişini yeniden yazmaktır; düzeltme yeni bir notla yapılır. Takip tarihi değiştirilebilir — o bir *plandır*, kayıt değil.
+- **Prim iki şarta bağlıdır:** ciro yalnızca onaylanmış siparişlerden sayılır *ve* prim tahsil edilen tutar oranında ödenir. Primi ciro üzerinden ödemek, plasiyeri ödeme gücü olmayan bayiye satmaya teşvik eder.
+- Ciro, plasiyerin **portföyündeki** bayilerin siparişlerinden gelir — siparişi kimin girdiğinden değil. Aksi hâlde portalin benimsenmesi plasiyerin çıkarına aykırı olurdu.
+- Gerçekleşen ciro önbelleklenmez; her okumada hesaplanır.
+
 ### e-Fatura / e-İrsaliye arşivi
 
 **PDF asıl belge değildir.** Hukuki asıl, UBL-TR 1.2 biçimindeki imzalı XML'dir; PDF ondan türetilmiş görüntüleme kopyasıdır. İhtilafta mahkemeye XML sunulur, bu yüzden arşiv XML üzerine kurulur ve ikisi çelişirse doğru olan XML'dir.
@@ -186,6 +194,16 @@ Kaynaklar `apps/ios/ToptanPortal/` altındadır ve bir Xcode uygulama hedefine e
 <string>Kayıtlı oturumunuza güvenli şekilde erişmek için kullanılır.</string>
 ```
 
+**Uygulanmış ekranlar:** rutin sipariş şablonları (10 saniye akışı), barkodla hızlı sepete ekleme, sepet ve sipariş gönderimi, saha ekranı (bayi listesi + tahsilat + ziyaret notu).
+
+**Çevrimdışı kuyruk (`Core/CevrimdisiKuyruk.swift`):** depo bodrumdadır, soğuk hava deposunda sinyal yoktur, plasiyer bayinin deposunda çalışır — bu uygulamanın kullanıldığı yerlerde internet bir varsayım değildir. Sipariş, tahsilat ve ziyaret notu diske yazılır ve bağlantı geldiğinde sırayla gönderilir:
+
+- Her işlemin idempotency anahtarı **oluşturulurken** üretilir; gövde de o anda kodlanır. Gövdeyi gönderim anında yeniden üretmek, aradan geçen sürede değişen bir fiyatla kullanıcının onayladığından farklı bir sipariş göndermek olurdu.
+- Kalıcı hata (4xx) alan kayıt **silinmez**, "elle bakılacak" olarak kullanıcıya gösterilir — o sipariş gerçek bir ticari niyettir.
+- Kuyruk atomik yazılır; iOS uygulamayı arka planda her an sonlandırabilir.
+
+**Barkod:** kamera açılınca tarama hemen başlar ("tara" düğmesi yok), aynı kod 2 saniye içinde tekrar okunmaz ve barkod bir birime aitse o birim seçili gelir — koli barkodunda "adet" seçili kalması depoda 12 kat yanlış miktar demektir.
+
 Tasarım ilkeleri: birincil eylemler ekranın alt şeridinde sabit durur (bir eliyle mal taşıyan kullanıcının başparmak bölgesi), dokunma hedefleri ≥ 44 pt, birincil düğmeler 56 pt. Renkler sistem semantik renklerinden gelir; aydınlık ve karanlık mod ek kod olmadan çalışır. Yenileme jetonu yalnızca Anahtar Zincirinde, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` sınıfıyla saklanır — yedeklerle başka cihaza taşınmaz.
 
 ---
@@ -194,10 +212,10 @@ Tasarım ilkeleri: birincil eylemler ekranın alt şeridinde sabit durur (bir el
 
 1. **On-prem köprü servisi (.NET 8)** — Logo Object Service ve MSSQL erişimi, mTLS sunucusu
 2. **e-Belge üretim hattı** — entegratör bağlantısı, UBL-TR üretimi, GİB durum takibi (arşiv ve sunum tarafı hazır)
-3. **iOS 10 saniye akışı** — barkod tarama, çevrimdışı depo modu, saha tahsilatı
-4. **Bayi ve plasiyer yönetimi** — portföy atama, ziyaret notları, hedef ve prim
+3. **Xcode proje hedefi** — iOS kaynakları hazır; `.xcodeproj` oluşturulup CI'a bağlanacak
+4. **Toplu sipariş (Excel)** — `Stok Kodu;Adet` dosyasından sepet oluşturma
 
-Tamamlananlar: stok rezervasyonu ve sipariş motoru, matris fiyat ve kademeli iskonto, cari hesap / ekstre / yaşlandırma, tahsilat kaydı, sipariş risk kalkanı, Logo entegrasyonunun bulut tarafı, 3D Secure sanal POS, DBS ve e-Belge arşivi.
+Tamamlananlar: stok rezervasyonu ve sipariş motoru, matris fiyat ve kademeli iskonto, cari hesap / ekstre / yaşlandırma, tahsilat kaydı, sipariş risk kalkanı, Logo entegrasyonunun bulut tarafı, 3D Secure sanal POS, DBS, e-Belge arşivi, saha yönetimi ve iOS uygulamasının çekirdek akışları.
 
 Temel altyapı (`OutboxEvent`, `IdempotencyKey`, denetim zinciri) bu modüller için şemada hazırdır.
 
