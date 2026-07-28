@@ -117,6 +117,25 @@ hash(n) = SHA256( hash(n-1) || "." || kanonikJSON(kayıt(n)) )
 - **Dağıtım varsayılan olarak FIFO'dur:** vadesi en eski açık belgeden başlanır, dağıtılamayan kısım avans olarak kalır.
 - Ekstre `Excel (CSV) İndir` düğmesiyle dışa aktarılır. Dosya **noktalı virgülle** ayrılır ve **BOM** ile başlar (Türkçe Excel virgülü ondalık ayracı sayar, BOM'suz UTF-8'i yerel kod sayfasıyla okur); `=`, `+`, `-`, `@` ile başlayan hücreler formül enjeksiyonuna karşı etkisizleştirilir. Kurallar `apps/web/src/lib/ekstre-csv.spec.ts` ile kilitlenmiştir.
 
+### Logo ERP entegrasyon katmanı
+
+Bulut API ile şirket içindeki Logo arasında yalnızca **mTLS ile korunan bir tünel** vardır ve **bağlantıyı her zaman bulut başlatır** — şirket içi ağda dışarıdan erişilebilen bir uç bulunmaz. Köprü yalnızca yanıt verir, buluta hiç çağrı yapmaz.
+
+| Kanal | Yön | Varsayılan sıklık |
+|---|---|---|
+| Stok | Logo → portal | 2 dk |
+| Cari hareket | Logo → portal | 15 dk |
+| Fiyat | Logo → portal | 30 dk |
+| Sipariş | portal → Logo | 30 sn |
+
+- **İmleç, zaman damgası değil Logo değişiklik sırasıdır.** Sistem saatleri birkaç saniye kaydığında zaman damgasıyla ilerleyen bir akış, o aralıktaki kayıtları sessizce atlar; atlanan kayıt fark akışında bir daha gelmez.
+- **Hata sınıflandırması** aktarımın merkezindedir: ağ / zaman aşımı / 5xx **geçicidir** (tekrar denenir, sipariş kuyrukta kalır), 4xx iş kuralı hatası **kalıcıdır** (olay ölü işaretlenir, operatöre düşer). Ayrım yapılmazsa ya kalıcı hata kuyruğu tıkar ya da geçici hata sipariş kaybettirir.
+- **Sipariş aktarımı `portalOrderId` üzerinden idempotenttir.** Ağ zaman aşımında "gönderdim mi?" sorusu cevapsızdır; tekrar denemek bu yüzden zorunlu, güvenli olması da köprünün idempotentliğine bağlıdır.
+- **`portalReserved` Logo verisiyle asla ezilmez** — o alan portalin kendi rezervasyonlarıdır; ezilirse henüz Logo'ya yansımamış siparişlerin stoğu ikinci kez satılır.
+- Cari hareketler `logoFicheRef` ile eşleştirilir; belge numarası Logo'da dönem içinde tekrar edebilir.
+- Fiş türü eşlemesi (`account-sync.service.ts`) Tiger / Go Wings varsayılanlarına göre yazılmıştır ve **her kurulumda müşterinin fiş türleriyle doğrulanmalıdır**.
+- Durum ekranı: `/panel/entegrasyon` (yalnızca `INTEGRATION_MANAGE`). Kanal açma/kapama, elle tur, tam senkron ve ölü olayları yeniden kuyruğa alma buradan yapılır.
+
 Bu modülün hiçbir görünümü Kör Sipariş Modundaki kullanıcıya ulaşmaz: ilgili uç noktalar `BALANCE_VIEW` / `STATEMENT_VIEW` / `AGING_REPORT_VIEW` yetkisi ister ve alt yetkili rolünde bu yetkiler yoktur. Yanıt süzgeci burada ikinci savunma hattıdır.
 
 ---
@@ -150,12 +169,12 @@ Tasarım ilkeleri: birincil eylemler ekranın alt şeridinde sabit durur (bir el
 
 ## Sıradaki modüller
 
-1. **Logo ERP entegrasyon katmanı** — on-prem köprü, mTLS tüneli, stok fark servisi, fiyat senkronu, cari ekstre aktarımı
+1. **On-prem köprü servisi (.NET 8)** — Logo Object Service ve MSSQL erişimi, mTLS sunucusu
 2. **3D Secure sanal POS ve DBS** — banka doğrudan borçlandırma dosyaları, kart ile anlık tahsilat
 3. **e-Fatura / e-İrsaliye arşivi** — 10 yıllık evrak erişimi, toplu indirme
 4. **iOS 10 saniye akışı** — barkod tarama, çevrimdışı depo modu, saha tahsilatı
 
-Tamamlananlar: stok rezervasyonu ve sipariş motoru, matris fiyat ve kademeli iskonto, cari hesap / ekstre / yaşlandırma, tahsilat kaydı ve sipariş risk kalkanı.
+Tamamlananlar: stok rezervasyonu ve sipariş motoru, matris fiyat ve kademeli iskonto, cari hesap / ekstre / yaşlandırma, tahsilat kaydı, sipariş risk kalkanı ve Logo entegrasyonunun bulut tarafı.
 
 Temel altyapı (`OutboxEvent`, `IdempotencyKey`, denetim zinciri) bu modüller için şemada hazırdır.
 
