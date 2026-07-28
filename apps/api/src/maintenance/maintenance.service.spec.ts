@@ -12,6 +12,8 @@ import { Logger } from '@nestjs/common';
 import type { IdempotencyService } from '../common/idempotency/idempotency.service';
 import type { PrismaService } from '../common/prisma/prisma.service';
 import type { IntegrationService } from '../integration/integration.service';
+import type { DueReminderService } from '../notification/due-reminder.service';
+import type { NotificationDispatchService } from '../notification/notification-dispatch.service';
 import type { StockService } from '../stock/stock.service';
 import type { LeaderLockService } from './leader-lock.service';
 import { MaintenanceService } from './maintenance.service';
@@ -26,6 +28,8 @@ interface Overrides {
   tenants?: { id: string; code: string }[];
   trigger?: jest.Mock;
   probe?: jest.Mock;
+  dispatchNotifications?: jest.Mock;
+  dueReminderRun?: jest.Mock;
 }
 
 function build(overrides: Overrides = {}) {
@@ -41,6 +45,8 @@ function build(overrides: Overrides = {}) {
       JOB_PRICE_SYNC_SECONDS: 1800,
       JOB_ACCOUNT_SYNC_SECONDS: 900,
       JOB_BRIDGE_PROBE_SECONDS: 300,
+      JOB_NOTIFICATION_DISPATCH_SECONDS: 30,
+      JOB_DUE_REMINDER_SECONDS: 3600,
     }),
   } as unknown as ConfigService;
 
@@ -71,17 +77,39 @@ function build(overrides: Overrides = {}) {
     tenant: { findMany: jest.fn().mockResolvedValue(overrides.tenants ?? []) },
   } as unknown as PrismaService;
 
+  const notifications = {
+    dispatchBatch:
+      overrides.dispatchNotifications ??
+      jest.fn().mockResolvedValue({ sent: 0, failed: 0, suppressed: 0 }),
+    purgeExpired: jest.fn().mockResolvedValue(0),
+  } as unknown as NotificationDispatchService;
+
+  const dueReminders = {
+    run: overrides.dueReminderRun ?? jest.fn().mockResolvedValue(0),
+  } as unknown as DueReminderService;
+
   const integration = {
     trigger: overrides.trigger ?? jest.fn().mockResolvedValue(null),
     probe: overrides.probe ?? jest.fn().mockResolvedValue(null),
   } as unknown as IntegrationService;
 
   return {
-    service: new MaintenanceService(config, lock, stock, idempotency, prisma, integration),
+    service: new MaintenanceService(
+      config,
+      lock,
+      stock,
+      idempotency,
+      prisma,
+      integration,
+      notifications,
+      dueReminders,
+    ),
     lock,
     stock,
     idempotency,
     integration,
+    notifications,
+    dueReminders,
   };
 }
 

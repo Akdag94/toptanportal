@@ -23,6 +23,8 @@ import type { AppConfig } from '../config/configuration';
 import { IdempotencyService } from '../common/idempotency/idempotency.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { IntegrationService } from '../integration/integration.service';
+import { DueReminderService } from '../notification/due-reminder.service';
+import { NotificationDispatchService } from '../notification/notification-dispatch.service';
 import { StockService } from '../stock/stock.service';
 import { LeaderLockService } from './leader-lock.service';
 
@@ -46,6 +48,8 @@ export class MaintenanceService implements OnModuleInit, OnModuleDestroy {
     private readonly idempotency: IdempotencyService,
     private readonly prisma: PrismaService,
     private readonly integration: IntegrationService,
+    private readonly notifications: NotificationDispatchService,
+    private readonly dueReminders: DueReminderService,
   ) {
     const app = this.config.getOrThrow<AppConfig>('app');
     this.enabled = app.MAINTENANCE_JOBS_ENABLED;
@@ -105,6 +109,31 @@ export class MaintenanceService implements OnModuleInit, OnModuleDestroy {
         intervalSeconds: app.JOB_ACCOUNT_SYNC_SECONDS,
         lockTtlSeconds: 900,
         run: () => this.syncChannel(SyncChannelContract.ACCOUNT),
+      },
+      {
+        name: 'bildirim-gonderimi',
+        intervalSeconds: app.JOB_NOTIFICATION_DISPATCH_SECONDS,
+        /* Her mesaj bir ag cagrisidir; parti 25 mesajdir ve saglayici
+           yavaslarsa tur uzar. Kilit turden belirgin sekilde uzun tutulur. */
+        lockTtlSeconds: 300,
+        run: () => this.dispatchNotifications(),
+      },
+      {
+        name: 'vade-hatirlatmasi',
+        intervalSeconds: app.JOB_DUE_REMINDER_SECONDS,
+        lockTtlSeconds: 600,
+        run: () => this.remindDueDocuments(),
+      },
+      {
+        name: 'bildirim-temizligi',
+        /* Saklama suresi gun olcegindedir; gunde bir tur yeterlidir ve
+           silme islemi buyuk bir tabloda kilit tutar. */
+        intervalSeconds: 86400,
+        lockTtlSeconds: 600,
+        run: async () => {
+          const silinen = await this.notifications.purgeExpired();
+          return silinen > 0 ? `${silinen} bildirim kaydı silindi` : null;
+        },
       },
       {
         name: 'kopru-yoklamasi',
@@ -264,6 +293,47 @@ export class MaintenanceService implements OnModuleInit, OnModuleDestroy {
     }
 
     return toplam > 0 ? `${toplam} sipariş olayı işlendi` : null;
+  }
+
+  /**
+   * Bildirim gonderimi.
+   *
+   * Kuyruk KIRACIDAN BAGIMSIZ islenir: bir kiracinin posta saglayicisi
+   * yavasladiginda digerlerinin bildirimi de gecikir, ama mesajlar sirayla ve
+   * tek kilit altinda gider - bu, ayni aliciya iki kez gonderme ihtimalini
+   * kapatir ve bir e-posta geri alinamaz.
+   */
+  private async dispatchNotifications(): Promise<string | null> {
+    const { sent, failed, suppressed } = await this.notifications.dispatchBatch();
+
+    if (failed > 0) {
+      this.logger.error(
+        `${failed} bildirim gönderilemedi ve deneme hakkı tükendi. ` +
+          'Bu kişiler bilgilendirilmedi; kayıt bildirim ekranında durur.',
+      );
+    }
+
+    if (sent === 0 && failed === 0 && suppressed === 0) return null;
+
+    return `gönderildi=${sent} başarısız=${failed} gönderilmedi=${suppressed}`;
+  }
+
+  /** Vade hatirlatmalari. Uretim kiraci basinadir; gonderim kuyruktan yapilir. */
+  private async remindDueDocuments(): Promise<string | null> {
+    let toplam = 0;
+
+    for (const kiraci of await this.aktifKiracilar()) {
+      try {
+        toplam += await this.dueReminders.run(kiraci.id);
+      } catch (error) {
+        this.logger.error(
+          `${kiraci.code} kiracısında vade hatırlatması üretilemedi: ` +
+            (error instanceof Error ? error.message : String(error)),
+        );
+      }
+    }
+
+    return toplam > 0 ? `${toplam} hatırlatma kuyruğa alındı` : null;
   }
 
   /**

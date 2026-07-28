@@ -9,6 +9,7 @@
 
 import { Module } from '@nestjs/common';
 
+import { DueReminderService } from './due-reminder.service';
 import { NotificationController } from './notification.controller';
 import { NotificationDispatchService } from './notification-dispatch.service';
 import { NotificationService } from './notification.service';
@@ -16,7 +17,13 @@ import { MailTransport, PushTransport } from './notification-transport';
 
 @Module({
   controllers: [NotificationController],
-  providers: [NotificationService, NotificationDispatchService, MailTransport, PushTransport],
-  exports: [NotificationService, NotificationDispatchService],
+  providers: [
+    NotificationService,
+    NotificationDispatchService,
+    DueReminderService,
+    MailTransport,
+    PushTransport,
+  ],
+  exports: [NotificationService, NotificationDispatchService, DueReminderService],
 })
 export class NotificationModule {}
