@@ -36,6 +36,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { FinanceModule } from './finance/finance.module';
 import { HealthModule } from './health/health.module';
 import { AuditQueryModule } from './audit/audit-query.module';
+import { UsersModule } from './users/users.module';
 import { EInvoiceModule } from './einvoice/einvoice.module';
 import { FieldModule } from './field/field.module';
 import { IntegrationModule } from './integration/integration.module';
@@ -72,6 +73,7 @@ import { StockModule } from './stock/stock.module';
     EInvoiceModule,
     FieldModule,
     AuditQueryModule,
+    UsersModule,
     MaintenanceModule,
   ],
   providers: [

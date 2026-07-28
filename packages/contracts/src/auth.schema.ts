@@ -245,3 +245,97 @@ export const activeSessionSchema = z.object({
 });
 
 export type ActiveSession = z.infer<typeof activeSessionSchema>;
+
+// ---------------------------------------------------------------------------
+// Kullanici yonetimi
+// ---------------------------------------------------------------------------
+
+export const managedUserSchema = z.object({
+  id: z.string().uuid(),
+  email: z.string(),
+  fullName: z.string(),
+  role: z.nativeEnum(UserRole),
+  roleLabel: z.string(),
+  status: z.enum(['INVITED', 'ACTIVE', 'SUSPENDED', 'LOCKED']),
+  companyId: z.string().uuid().nullable(),
+  companyTitle: z.string().nullable(),
+  mfaEnrolled: z.boolean(),
+  mfaRequired: z.boolean(),
+  lastLoginAt: z.string().nullable(),
+  createdAt: z.string(),
+  /** Alt yetkili icin tanimli harcama limiti. Null = limitsiz. */
+  perOrderLimit: z.number().nullable(),
+  monthlyLimit: z.number().nullable(),
+  alwaysRequiresApproval: z.boolean(),
+});
+
+export type ManagedUser = z.infer<typeof managedUserSchema>;
+
+export const userListQuerySchema = z.object({
+  companyId: z.string().uuid().optional(),
+  q: z.string().trim().max(80).optional(),
+  role: z.nativeEnum(UserRole).optional(),
+  offset: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+export type UserListQuery = z.infer<typeof userListQuerySchema>;
+
+export const userPageSchema = z.object({
+  users: z.array(managedUserSchema),
+  totalCount: z.number().int(),
+  hasMore: z.boolean(),
+});
+
+export type UserPage = z.infer<typeof userPageSchema>;
+
+/**
+ * Kullanici daveti.
+ *
+ * Sifre BURADA BELIRLENMEZ. Sunucu tek kullanimlik bir sifre uretir ve
+ * `mustChangePassword` isaretini koyar; kullanici ilk giriste kendi sifresini
+ * belirler. Yoneticinin belirledigi bir sifre, kullanicinin sifresini bilen
+ * ikinci bir kisi demektir ve bu, hesabin gercekten kime ait oldugunu
+ * belirsizlestirir.
+ */
+export const inviteUserSchema = z.object({
+  email: z.string().email('Geçerli bir e-posta adresi girin.').max(254),
+  fullName: z.string().trim().min(3).max(120),
+  role: z.nativeEnum(UserRole),
+  /** Isletme rollerinde zorunlu; admin ve plasiyerde yok sayilir. */
+  companyId: z.string().uuid().optional(),
+});
+
+export type InviteUserRequest = z.infer<typeof inviteUserSchema>;
+
+export const inviteUserResultSchema = z.object({
+  user: managedUserSchema,
+  /**
+   * Tek kullanimlik sifre. YALNIZCA bu yanitta doner ve bir daha
+   * gosterilmez - veritabaninda yalnizca Argon2id ozeti tutulur.
+   */
+  temporaryPassword: z.string(),
+});
+
+export type InviteUserResult = z.infer<typeof inviteUserResultSchema>;
+
+export const updateUserStatusSchema = z.object({
+  status: z.enum(['ACTIVE', 'SUSPENDED']),
+});
+
+export type UpdateUserStatusRequest = z.infer<typeof updateUserStatusSchema>;
+
+/**
+ * Alt kullanici harcama limiti.
+ *
+ * Limit alt kullaniciya GOSTERILMEZ: Kor Siparis Modundaki bir hesap tutar
+ * gormez, dolayisiyla limitini de goremez. Limit asildiginda siparis "onay
+ * bekliyor" durumuna duser ve kullanici yalnizca bunu gorur.
+ */
+export const setSpendingLimitSchema = z.object({
+  perOrderLimit: z.number().nonnegative().max(99999999).nullable(),
+  monthlyLimit: z.number().nonnegative().max(999999999).nullable(),
+  alwaysRequiresApproval: z.boolean(),
+});
+
+export type SetSpendingLimitRequest = z.infer<typeof setSpendingLimitSchema>;
