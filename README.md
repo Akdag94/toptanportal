@@ -117,6 +117,18 @@ hash(n) = SHA256( hash(n-1) || "." || kanonikJSON(kayıt(n)) )
 - **Dağıtım varsayılan olarak FIFO'dur:** vadesi en eski açık belgeden başlanır, dağıtılamayan kısım avans olarak kalır.
 - Ekstre `Excel (CSV) İndir` düğmesiyle dışa aktarılır. Dosya **noktalı virgülle** ayrılır ve **BOM** ile başlar (Türkçe Excel virgülü ondalık ayracı sayar, BOM'suz UTF-8'i yerel kod sayfasıyla okur); `=`, `+`, `-`, `@` ile başlayan hücreler formül enjeksiyonuna karşı etkisizleştirilir. Kurallar `apps/web/src/lib/ekstre-csv.spec.ts` ile kilitlenmiştir.
 
+### Sanal POS (3D Secure) ve DBS
+
+**Kart verisi portale hiç ulaşmaz.** Kullanıcı bankanın 3D sayfasına yönlendirilir ve kartını oraya girer; portalin gördüğü tek şey bankanın döndüğü sonuç ve maskeli karttır (`454671******7894`). Kart verisi sunucudan bir kez geçerse o sunucu logları, yedekleri ve bellek dökümleriyle birlikte PCI-DSS kapsamına girer — kapsam dışında kalmanın tek güvenilir yolu veriyi hiç görmemektir.
+
+- **Geri dönüş ucunda oturum yoktur** (`POST /pos/callback/:tenantCode`, `@Public()`); banka jeton taşıyamaz. Kimlik doğrulamasının yerini mağaza anahtarıyla hesaplanan **özet** alır ve özeti tutmayan yanıt hiçbir kaydı değiştirmez, yalnızca denetim izi bırakır.
+- **Tutar her zaman veritabanından okunur.** Bankadan dönen parametreler kullanıcının tarayıcısından geçer; oradaki tutara güvenmek 1 TL ödeyip 10.000 TL'lik borç kapatmanın yoludur.
+- **Başarı için iki koşul birlikte aranır:** 3D doğrulaması (`mdStatus`) *ve* banka provizyonu (`Response`). Yalnızca birine bakmak, parası çekilmemiş bir işlemi başarılı saymaktır. Kural `apps/api/src/pos/pos-provider.spec.ts` ile kilitlenmiştir.
+- **`NEEDS_REVIEW`**: banka onayladı ama portal tahsilatı yazamadıysa işlem başarısız sayılmaz, insan incelemesine düşer ve kullanıcıya açıkça "yeniden ödeme yapmayın" denir.
+- POS yapılandırması **ya tamamdır ya da yoktur**; yarım yapılandırmayla uygulama açılmaz.
+
+**DBS:** vadesi gelen açık belgeler borç dosyası olarak bankaya verilir, banka sonuç dosyası döner. Tutarlar **kuruş** olarak yazılır — ondalık ayracı bankadan bankaya değişir ve yanlış yorumlanan bir ayraç 1.234,56 TL'yi 123.456 TL yapar. Aynı belge açık bir DBS kaydında yalnızca bir kez bulunabilir (kısmi benzersiz indeks): aynı faturayı iki dosyaya koymak bayiden iki kez tahsilat demektir ve geri dönüşü portalin düzeltebileceği bir şey değildir.
+
 ### Logo ERP entegrasyon katmanı
 
 Bulut API ile şirket içindeki Logo arasında yalnızca **mTLS ile korunan bir tünel** vardır ve **bağlantıyı her zaman bulut başlatır** — şirket içi ağda dışarıdan erişilebilen bir uç bulunmaz. Köprü yalnızca yanıt verir, buluta hiç çağrı yapmaz.
@@ -170,11 +182,11 @@ Tasarım ilkeleri: birincil eylemler ekranın alt şeridinde sabit durur (bir el
 ## Sıradaki modüller
 
 1. **On-prem köprü servisi (.NET 8)** — Logo Object Service ve MSSQL erişimi, mTLS sunucusu
-2. **3D Secure sanal POS ve DBS** — banka doğrudan borçlandırma dosyaları, kart ile anlık tahsilat
-3. **e-Fatura / e-İrsaliye arşivi** — 10 yıllık evrak erişimi, toplu indirme
-4. **iOS 10 saniye akışı** — barkod tarama, çevrimdışı depo modu, saha tahsilatı
+2. **e-Fatura / e-İrsaliye arşivi** — 10 yıllık evrak erişimi, toplu indirme
+3. **iOS 10 saniye akışı** — barkod tarama, çevrimdışı depo modu, saha tahsilatı
+4. **Bayi ve plasiyer yönetimi** — portföy atama, ziyaret notları, hedef ve prim
 
-Tamamlananlar: stok rezervasyonu ve sipariş motoru, matris fiyat ve kademeli iskonto, cari hesap / ekstre / yaşlandırma, tahsilat kaydı, sipariş risk kalkanı ve Logo entegrasyonunun bulut tarafı.
+Tamamlananlar: stok rezervasyonu ve sipariş motoru, matris fiyat ve kademeli iskonto, cari hesap / ekstre / yaşlandırma, tahsilat kaydı, sipariş risk kalkanı, Logo entegrasyonunun bulut tarafı, 3D Secure sanal POS ve DBS.
 
 Temel altyapı (`OutboxEvent`, `IdempotencyKey`, denetim zinciri) bu modüller için şemada hazırdır.
 
