@@ -98,6 +98,64 @@ actor APIClient {
         _ = try? await request(path, method: method, body: body, as: Bos.self)
     }
 
+    /// Hazir kodlanmis bir govdeyi gonderir (cevrimdisi kuyrugu icin).
+    ///
+    /// Kuyruktaki islem, OLUSTURULDUGU anda kodlanmis govdeyi ve kendi
+    /// idempotency anahtarini tasir. Govdeyi gonderim aninda yeniden uretmek,
+    /// aradan gecen surede degisen bir fiyat veya birim yuzunden kullanicinin
+    /// onayladigindan FARKLI bir siparis gondermek olurdu.
+    func requestRaw(
+        _ path: String,
+        method: String = "POST",
+        rawBody: Data,
+        idempotencyKey: String,
+        allowRefresh: Bool = true
+    ) async throws {
+        do {
+            try await performRaw(path, method: method, rawBody: rawBody, idempotencyKey: idempotencyKey)
+        } catch APIError.unauthorized where allowRefresh && hasStoredSession {
+            guard await refreshSession() else { throw APIError.unauthorized }
+            try await performRaw(path, method: method, rawBody: rawBody, idempotencyKey: idempotencyKey)
+        }
+    }
+
+    private func performRaw(
+        _ path: String,
+        method: String,
+        rawBody: Data,
+        idempotencyKey: String
+    ) async throws {
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/v1\(path)"))
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
+        request.httpBody = rawBody
+
+        if let accessToken {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        let data: Data
+        let response: URLResponse
+
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw APIError.network
+        }
+
+        guard let http = response as? HTTPURLResponse else { throw APIError.network }
+
+        guard (200..<300).contains(http.statusCode) else {
+            if http.statusCode == 401 { throw APIError.unauthorized }
+            if let body = try? decoder.decode(APIErrorBody.self, from: data) {
+                throw APIError.server(body)
+            }
+            throw APIError.network
+        }
+    }
+
     private func perform<Response: Decodable>(
         _ path: String,
         method: String,
