@@ -112,73 +112,74 @@ model Tenant {
   createdAt    DateTime @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime @updatedAt @db.Timestamptz(6)
 
-  companies        Company[]
-  users            User[]
-  auditLogs        AuditLog[]
-  auditChainHead   AuditChainHead?
-  ipWhitelist      AdminIpWhitelist[]
-  consentRecords   ConsentRecord[]
-  outboxEvents     OutboxEvent[]
-  idempotencyKeys  IdempotencyKey[]
-  loginAttempts    LoginAttempt[]
-  warehouses       Warehouse[]
-  products         Product[]
-  priceLists       PriceList[]
-  discountRules    DiscountRule[]
-  carts            Cart[]
-  orders           Order[]
-  orderTemplates   OrderTemplate[]
-  accountEntries   AccountEntry[]
-  payments         Payment[]
-  syncCursors      SyncCursor[]
-  bridgeChecks     BridgeHealthCheck[]
-  posTransactions  PosTransaction[]
-  dbsBatches       DbsBatch[]
-  eDocuments       EDocument[]
-  visitNotes       VisitNote[]
-  salesTargets     SalesTarget[]
+  companies       Company[]
+  users           User[]
+  auditLogs       AuditLog[]
+  auditChainHead  AuditChainHead?
+  ipWhitelist     AdminIpWhitelist[]
+  consentRecords  ConsentRecord[]
+  outboxEvents    OutboxEvent[]
+  idempotencyKeys IdempotencyKey[]
+  loginAttempts   LoginAttempt[]
+  warehouses      Warehouse[]
+  products        Product[]
+  priceLists      PriceList[]
+  discountRules   DiscountRule[]
+  carts           Cart[]
+  orders          Order[]
+  orderTemplates  OrderTemplate[]
+  accountEntries  AccountEntry[]
+  payments        Payment[]
+  syncCursors     SyncCursor[]
+  bridgeChecks    BridgeHealthCheck[]
+  posTransactions PosTransaction[]
+  dbsBatches      DbsBatch[]
+  eDocuments      EDocument[]
+  visitNotes      VisitNote[]
+  salesTargets    SalesTarget[]
+  notifications   NotificationMessage[]
 
   @@map("tenants")
 }
 
 /// Bayi / kafe / otel. Logo tarafindaki CLCARD kaydinin portal karsiligi.
 model Company {
-  id        String @id @default(uuid()) @db.Uuid
-  tenantId  String @db.Uuid
-  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   /// Logo cari kodu (CLCARD.CODE) - senkronizasyonun anahtari
   logoCariCode String @db.VarChar(32)
   /// Logo cari kart LOGICALREF - hizli join icin
   logoCariRef  Int?
 
-  title      String  @db.VarChar(200)
-  shortName  String? @db.VarChar(80)
-  taxNumber  String? @db.VarChar(11)
-  taxOffice  String? @db.VarChar(80)
+  title          String  @db.VarChar(200)
+  shortName      String? @db.VarChar(80)
+  taxNumber      String? @db.VarChar(11)
+  taxOffice      String? @db.VarChar(80)
   /// e-Fatura mukellef kontrolu icin GLN / VKN-TCKN etiketi
-  gibIdentifier String? @db.VarChar(20)
+  gibIdentifier  String? @db.VarChar(20)
   isEInvoiceUser Boolean @default(false)
 
-  phone   String? @db.VarChar(24)
-  email   String? @db.VarChar(254)
-  city    String? @db.VarChar(64)
-  district String? @db.VarChar(64)
-  address String? @db.VarChar(500)
+  phone     String?  @db.VarChar(24)
+  email     String?  @db.VarChar(254)
+  city      String?  @db.VarChar(64)
+  district  String?  @db.VarChar(64)
+  address   String?  @db.VarChar(500)
   latitude  Decimal? @db.Decimal(9, 6)
   longitude Decimal? @db.Decimal(9, 6)
 
   /// Logo'da tanimli ozel fiyat listesi numarasi. Null ise genel liste gecerlidir.
-  logoPriceListNo Int?
+  logoPriceListNo     Int?
   /// Varsayilan sevk ambari (Logo ambar no)
-  defaultWarehouseNo Int @default(0)
+  defaultWarehouseNo  Int       @default(0)
   /// Portal tarafinda cache'lenen risk verisi. Otorite Logo'dur; siparis aninda
   /// canli sorgulanir. Buradaki degerler yalnizca UI on-uyarisi icindir.
-  creditLimit        Decimal  @default(0) @db.Decimal(18, 4)
-  cachedBalance      Decimal  @default(0) @db.Decimal(18, 4)
-  cachedOverdueAmount Decimal @default(0) @db.Decimal(18, 4)
-  cachedOverdueDays  Int      @default(0)
-  riskDataSyncedAt   DateTime? @db.Timestamptz(6)
+  creditLimit         Decimal   @default(0) @db.Decimal(18, 4)
+  cachedBalance       Decimal   @default(0) @db.Decimal(18, 4)
+  cachedOverdueAmount Decimal   @default(0) @db.Decimal(18, 4)
+  cachedOverdueDays   Int       @default(0)
+  riskDataSyncedAt    DateTime? @db.Timestamptz(6)
 
   /// Manuel blokaj. Logo risk kontrolunden bagimsiz olarak admin kilidi.
   isBlocked       Boolean @default(false)
@@ -189,19 +190,19 @@ model Company {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  users            User[]
-  salesRepLinks    SalesRepAssignment[]
-  consentRecords   ConsentRecord[]
-  carts            Cart[]
-  orders           Order[]
-  orderTemplates   OrderTemplate[]
-  discountRules    DiscountRule[]
-  accountEntries   AccountEntry[]
-  payments         Payment[]
-  posTransactions  PosTransaction[]
-  dbsRecords       DbsRecord[]
-  eDocuments       EDocument[]
-  visitNotes       VisitNote[]
+  users           User[]
+  salesRepLinks   SalesRepAssignment[]
+  consentRecords  ConsentRecord[]
+  carts           Cart[]
+  orders          Order[]
+  orderTemplates  OrderTemplate[]
+  discountRules   DiscountRule[]
+  accountEntries  AccountEntry[]
+  payments        Payment[]
+  posTransactions PosTransaction[]
+  dbsRecords      DbsRecord[]
+  eDocuments      EDocument[]
+  visitNotes      VisitNote[]
 
   @@unique([tenantId, logoCariCode])
   @@index([tenantId, isActive])
@@ -223,29 +224,29 @@ model User {
   companyId String?  @db.Uuid
   company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
-  email          String @db.VarChar(254)
+  email           String @db.VarChar(254)
   /// Kucuk harfe indirgenmis, benzersizlik ve arama icin
   emailNormalized String @db.VarChar(254)
-  fullName       String @db.VarChar(120)
+  fullName        String @db.VarChar(120)
 
   /// KVKK: telefon at-rest sifreli. phoneIdx = HMAC-SHA256(telefon) - arama icin.
   phoneEnc String? @db.Text
   phoneIdx String? @db.Char(64)
 
   /// Argon2id
-  passwordHash        String    @db.Text
-  passwordChangedAt   DateTime  @default(now()) @db.Timestamptz(6)
-  mustChangePassword  Boolean   @default(false)
+  passwordHash       String   @db.Text
+  passwordChangedAt  DateTime @default(now()) @db.Timestamptz(6)
+  mustChangePassword Boolean  @default(false)
 
   role   UserRole
   status UserStatus @default(INVITED)
 
   /// Rol geregi 2FA zorunluysa true. Kullanici bazinda ek zorunluluk da atanabilir.
-  mfaRequired  Boolean    @default(false)
-  mfaMethod    MfaMethod?
+  mfaRequired   Boolean    @default(false)
+  mfaMethod     MfaMethod?
   /// TOTP secret'i AES-256-GCM ile sifreli
-  mfaSecretEnc String?    @db.Text
-  mfaEnrolledAt DateTime? @db.Timestamptz(6)
+  mfaSecretEnc  String?    @db.Text
+  mfaEnrolledAt DateTime?  @db.Timestamptz(6)
 
   failedLoginCount Int       @default(0)
   lockedUntil      DateTime? @db.Timestamptz(6)
@@ -261,22 +262,25 @@ model User {
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt DateTime? @db.Timestamptz(6)
 
-  sessions          Session[]
-  trustedDevices    TrustedDevice[]
-  recoveryCodes     MfaRecoveryCode[]
-  spendingLimit     UserSpendingLimit?
+  sessions            Session[]
+  trustedDevices      TrustedDevice[]
+  recoveryCodes       MfaRecoveryCode[]
+  spendingLimit       UserSpendingLimit?
   salesRepAssignments SalesRepAssignment[]
-  consentRecords    ConsentRecord[]
-  carts             Cart[]
-  createdOrders     Order[]             @relation("OrderCreatedBy")
-  approvedOrders    Order[]             @relation("OrderApprovedBy")
-  orderTemplates    OrderTemplate[]
-  recordedPayments  Payment[]           @relation("PaymentRecordedBy")
-  posTransactions   PosTransaction[]    @relation("PosInitiatedBy")
-  dbsBatches        DbsBatch[]          @relation("DbsCreatedBy")
-  eDocumentAccess   EDocumentAccess[]
-  visitNotes        VisitNote[]         @relation("VisitNoteAuthor")
-  salesTargets      SalesTarget[]       @relation("SalesTargetOwner")
+  consentRecords      ConsentRecord[]
+  carts               Cart[]
+  createdOrders       Order[]                  @relation("OrderCreatedBy")
+  approvedOrders      Order[]                  @relation("OrderApprovedBy")
+  orderTemplates      OrderTemplate[]
+  recordedPayments    Payment[]                @relation("PaymentRecordedBy")
+  posTransactions     PosTransaction[]         @relation("PosInitiatedBy")
+  dbsBatches          DbsBatch[]               @relation("DbsCreatedBy")
+  eDocumentAccess     EDocumentAccess[]
+  visitNotes          VisitNote[]              @relation("VisitNoteAuthor")
+  salesTargets        SalesTarget[]            @relation("SalesTargetOwner")
+  notifications       NotificationMessage[]    @relation("NotificationRecipient")
+  notificationPrefs   NotificationPreference[]
+  pushDevices         PushDevice[]
 
   @@unique([tenantId, emailNormalized])
   @@index([tenantId, role, status])
@@ -293,11 +297,11 @@ model UserSpendingLimit {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   /// Null = limitsiz
-  perOrderLimit Decimal? @db.Decimal(18, 4)
-  dailyLimit    Decimal? @db.Decimal(18, 4)
-  monthlyLimit  Decimal? @db.Decimal(18, 4)
+  perOrderLimit          Decimal? @db.Decimal(18, 4)
+  dailyLimit             Decimal? @db.Decimal(18, 4)
+  monthlyLimit           Decimal? @db.Decimal(18, 4)
   /// true ise tutar ne olursa olsun ana yetkili onayi gerekir
-  alwaysRequiresApproval Boolean @default(true)
+  alwaysRequiresApproval Boolean  @default(true)
 
   updatedByUserId String?  @db.Uuid
   updatedAt       DateTime @updatedAt @db.Timestamptz(6)
@@ -339,7 +343,7 @@ model Session {
   /// JWT access token'lardaki `sid` claim'i bu kaydi isaret eder.
   refreshTokenHash String @unique @db.Char(64)
   /// Ayni login zincirindeki tum oturumlarin ortak kimligi (reuse tespiti icin)
-  familyId String @db.Uuid
+  familyId         String @db.Uuid
 
   deviceIdHash String         @db.Char(64)
   deviceName   String         @db.VarChar(80)
@@ -354,12 +358,12 @@ model Session {
   masqueradeStartedAt DateTime? @db.Timestamptz(6)
   masqueradeReason    String?   @db.VarChar(280)
 
-  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
-  lastUsedAt     DateTime  @default(now()) @db.Timestamptz(6)
-  expiresAt      DateTime  @db.Timestamptz(6)
-  revokedAt      DateTime? @db.Timestamptz(6)
-  revokedReason  String?   @db.VarChar(120)
-  replacedBySessionId String? @db.Uuid
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  lastUsedAt          DateTime  @default(now()) @db.Timestamptz(6)
+  expiresAt           DateTime  @db.Timestamptz(6)
+  revokedAt           DateTime? @db.Timestamptz(6)
+  revokedReason       String?   @db.VarChar(120)
+  replacedBySessionId String?   @db.Uuid
 
   @@index([userId, revokedAt])
   @@index([familyId])
@@ -393,10 +397,10 @@ model MfaRecoveryCode {
   userId String @db.Uuid
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  codeHash String    @db.Text
-  usedAt   DateTime? @db.Timestamptz(6)
-  usedIp   String?   @db.VarChar(45)
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  codeHash  String    @db.Text
+  usedAt    DateTime? @db.Timestamptz(6)
+  usedIp    String?   @db.VarChar(45)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
 
   @@index([userId, usedAt])
   @@map("mfa_recovery_codes")
@@ -433,14 +437,14 @@ model AdminIpWhitelist {
   tenantId String @db.Uuid
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  cidr        String   @db.VarChar(45)
-  label       String   @db.VarChar(120)
-  isActive    Boolean  @default(true)
+  cidr            String    @db.VarChar(45)
+  label           String    @db.VarChar(120)
+  isActive        Boolean   @default(true)
   /// Null = suresiz. Gecici erisim icin tarih verilebilir.
-  expiresAt   DateTime? @db.Timestamptz(6)
-  createdByUserId String? @db.Uuid
-  createdAt   DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+  expiresAt       DateTime? @db.Timestamptz(6)
+  createdByUserId String?   @db.Uuid
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
 
   @@unique([tenantId, cidr])
   @@index([tenantId, isActive])
@@ -457,8 +461,8 @@ model AuditChainHead {
   tenantId String @id @db.Uuid
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  lastSeq  BigInt   @default(0)
-  lastHash String   @default("0000000000000000000000000000000000000000000000000000000000000000") @db.Char(64)
+  lastSeq   BigInt   @default(0)
+  lastHash  String   @default("0000000000000000000000000000000000000000000000000000000000000000") @db.Char(64)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   @@map("audit_chain_head")
@@ -477,13 +481,13 @@ model AuditLog {
   /// Kaydin veritabanina yazildigi an
   recordedAt DateTime @default(now()) @db.Timestamptz(6)
 
-  actorType   AuditActorType @default(USER)
-  actorUserId String?        @db.Uuid
-  actorRole   UserRole?
-  actorEmail  String?        @db.VarChar(254)
+  actorType           AuditActorType @default(USER)
+  actorUserId         String?        @db.Uuid
+  actorRole           UserRole?
+  actorEmail          String?        @db.VarChar(254)
   /// Plasiyer bayi adina islem yapiyorsa hedef cari burada tutulur.
-  onBehalfOfCompanyId String? @db.Uuid
-  companyId           String? @db.Uuid
+  onBehalfOfCompanyId String?        @db.Uuid
+  companyId           String?        @db.Uuid
 
   action       String  @db.VarChar(80)
   resourceType String? @db.VarChar(60)
@@ -537,11 +541,11 @@ model ConsentRecord {
   userAgent String? @db.VarChar(512)
 
   /// IYS (Ileti Yonetim Sistemi) senkronizasyon durumu - 6563 sayili Kanun
-  iysStatus   IysSyncStatus @default(NOT_REQUIRED)
-  iysSyncedAt DateTime?     @db.Timestamptz(6)
-  iysError    String?       @db.VarChar(500)
+  iysStatus    IysSyncStatus @default(NOT_REQUIRED)
+  iysSyncedAt  DateTime?     @db.Timestamptz(6)
+  iysError     String?       @db.VarChar(500)
   /// IYS'ye bildirilen alici adresi (telefon/e-posta)
-  iysRecipient String?      @db.VarChar(254)
+  iysRecipient String?       @db.VarChar(254)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
@@ -589,9 +593,9 @@ model IdempotencyKey {
   tenantId String @db.Uuid
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  userId       String  @db.Uuid
-  endpoint     String  @db.VarChar(200)
-  requestHash  String  @db.Char(64)
+  userId       String    @db.Uuid
+  endpoint     String    @db.VarChar(200)
+  requestHash  String    @db.Char(64)
   responseCode Int?
   responseBody Json?
   /// Islem devam ederken ayni anahtarla gelen ikinci istek beklemeye alinir.
@@ -702,11 +706,11 @@ model Product {
   logoItemCode String @db.VarChar(48)
   logoItemRef  Int?
 
-  name        String  @db.VarChar(240)
-  description String? @db.VarChar(2000)
-  brand       String? @db.VarChar(80)
+  name         String  @db.VarChar(240)
+  description  String? @db.VarChar(2000)
+  brand        String? @db.VarChar(80)
   categoryPath String? @db.VarChar(240)
-  imageUrl    String? @db.VarChar(500)
+  imageUrl     String? @db.VarChar(500)
 
   /// Logo'daki 1. birim (ana birim) - tum stok bu birimde tutulur
   baseUnitCode String @db.VarChar(24)
@@ -754,16 +758,16 @@ model ProductUnit {
 
   /// Logo birim seti satir referansi (UNITSETL.LOGICALREF)
   logoUnitRef Int?
-  code String @db.VarChar(24)
-  name String @db.VarChar(48)
+  code        String @db.VarChar(24)
+  name        String @db.VarChar(48)
 
   /// 1 bu birim = kac ana birim. Ana birimde 1'dir.
-  conversionFactor Decimal @db.Decimal(18, 6)
-  isBaseUnit       Boolean @default(false)
+  conversionFactor  Decimal @db.Decimal(18, 6)
+  isBaseUnit        Boolean @default(false)
   /// Katalogda varsayilan secili gelen birim (genelde Koli)
   isDefaultForOrder Boolean @default(false)
-  sortOrder        Int     @default(0)
-  isActive         Boolean @default(true)
+  sortOrder         Int     @default(0)
+  isActive          Boolean @default(true)
 
   priceListItems PriceListItem[]
   cartItems      CartItem[]
@@ -781,7 +785,7 @@ model ProductBarcode {
   productId String  @db.Uuid
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  barcode String  @db.VarChar(48)
+  barcode  String  @db.VarChar(48)
   /// Barkod hangi birime ait (koli barkodu / adet barkodu)
   unitCode String? @db.VarChar(24)
 
@@ -809,9 +813,9 @@ model StockSnapshot {
   warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
 
   /// Ana birimde fiziki stok (Logo: ONHAND)
-  onHand Decimal @default(0) @db.Decimal(18, 4)
+  onHand         Decimal @default(0) @db.Decimal(18, 4)
   /// Logo tarafinda bekleyen siparis rezervleri (portal disi kanallar dahil)
-  logoReserved Decimal @default(0) @db.Decimal(18, 4)
+  logoReserved   Decimal @default(0) @db.Decimal(18, 4)
   /// Portal tarafinda tutulan, Logo'ya henuz yansimamis rezervlerin toplami.
   /// Rezervasyon tablosuyla tutarliligi ReservationService korur.
   portalReserved Decimal @default(0) @db.Decimal(18, 4)
@@ -867,10 +871,10 @@ model PriceList {
   name            String  @db.VarChar(120)
   currency        String  @default("TRY") @db.VarChar(3)
   /// Fiyatlar KDV dahil mi girilmis
-  vatIncluded Boolean @default(false)
+  vatIncluded     Boolean @default(false)
   /// Hicbir cariye ozel liste yoksa kullanilan liste
-  isDefault Boolean @default(false)
-  isActive  Boolean @default(true)
+  isDefault       Boolean @default(false)
+  isActive        Boolean @default(true)
 
   validFrom DateTime? @db.Timestamptz(6)
   validTo   DateTime? @db.Timestamptz(6)
@@ -902,7 +906,7 @@ model PriceListItem {
   unit   ProductUnit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
 
   /// Vergi haric birim fiyat
-  price Decimal @db.Decimal(18, 6)
+  price       Decimal @db.Decimal(18, 6)
   /// Bu fiyatin gecerli oldugu asgari miktar (Logo kademeli fiyat karti)
   minQuantity Decimal @default(0) @db.Decimal(18, 4)
 
@@ -946,7 +950,7 @@ model DiscountRule {
   /// Yuzde iskonto orani (5 = %5)
   ratePercent Decimal @db.Decimal(6, 3)
   /// Zincirli iskontoda uygulama sirasi (1, 2, 3...)
-  chainOrder Int @default(1)
+  chainOrder  Int     @default(1)
 
   /// Logo'daki indirim kartinin kodu - fise yazarken referans verilir
   logoDiscountCode String? @db.VarChar(48)
@@ -982,7 +986,7 @@ model Cart {
   userId String @db.Uuid
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  note      String? @db.VarChar(500)
+  note      String?  @db.VarChar(500)
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
@@ -1062,9 +1066,9 @@ model Order {
   rejectReason String? @db.VarChar(500)
 
   /// Logo'da olusan siparis fisi
-  logoOrderNumber String? @db.VarChar(32)
+  logoOrderNumber String?   @db.VarChar(32)
   logoOrderRef    Int?
-  logoError       String? @db.VarChar(1000)
+  logoError       String?   @db.VarChar(1000)
   sentToLogoAt    DateTime? @db.Timestamptz(6)
   confirmedAt     DateTime? @db.Timestamptz(6)
 
@@ -1108,11 +1112,11 @@ model OrderLine {
   unitCode    String @db.VarChar(24)
 
   /// Secilen birimdeki miktar
-  quantity Decimal @db.Decimal(18, 4)
+  quantity         Decimal @db.Decimal(18, 4)
   /// 1 secili birim = kac ana birim
   conversionFactor Decimal @db.Decimal(18, 6)
   /// Ana birime cevrilmis miktar - stok rezervasyonu bu deger uzerinden yapilir
-  baseQuantity Decimal @db.Decimal(18, 4)
+  baseQuantity     Decimal @db.Decimal(18, 4)
 
   unitPrice     Decimal @db.Decimal(18, 6)
   grossAmount   Decimal @db.Decimal(18, 4)
@@ -1142,7 +1146,7 @@ model OrderStatusHistory {
   toStatus   OrderStatus
   reason     String?      @db.VarChar(500)
 
-  actorUserId String? @db.Uuid
+  actorUserId String?  @db.Uuid
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([orderId, createdAt])
@@ -1165,11 +1169,11 @@ model OrderTemplate {
   ownerUserId String @db.Uuid
   owner       User   @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
 
-  name       String  @db.VarChar(120)
-  isShared   Boolean @default(false)
-  sortOrder  Int     @default(0)
+  name       String    @db.VarChar(120)
+  isShared   Boolean   @default(false)
+  sortOrder  Int       @default(0)
   lastUsedAt DateTime? @db.Timestamptz(6)
-  useCount   Int     @default(0)
+  useCount   Int       @default(0)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -1257,7 +1261,7 @@ model AccountEntry {
   kind AccountEntryKind
 
   /// Belge tarihi - ekstrenin siralama anahtari
-  entryDate DateTime @db.Date
+  entryDate DateTime  @db.Date
   /// Vade tarihi. Yalnizca borc doguran belgelerde dolu olur.
   dueDate   DateTime? @db.Date
 
@@ -1319,8 +1323,8 @@ model Payment {
   note       String?  @db.VarChar(280)
 
   /// Kaydi giren kullanici. Saha tahsilatinda plasiyer, portalde muhasebeci.
-  recordedByUserId String @db.Uuid
-  recordedBy       User   @relation("PaymentRecordedBy", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+  recordedByUserId  String  @db.Uuid
+  recordedBy        User    @relation("PaymentRecordedBy", fields: [recordedByUserId], references: [id], onDelete: Restrict)
   /// Plasiyer saha tahsilati ise true - kasa mutabakati bu alandan yurur.
   isFieldCollection Boolean @default(false)
 
@@ -1329,7 +1333,7 @@ model Payment {
   failureReason String? @db.VarChar(280)
 
   /// Onaylandiginda olusan cari hareket. Tek yonlu 1-1.
-  entryId String? @unique @db.Uuid
+  entryId String?       @unique @db.Uuid
   entry   AccountEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
 
   confirmedAt DateTime? @db.Timestamptz(6)
@@ -1566,11 +1570,11 @@ model DbsRecord {
   entryId String       @db.Uuid
   entry   AccountEntry @relation(fields: [entryId], references: [id], onDelete: Restrict)
 
-  amount   Decimal         @db.Decimal(18, 4)
-  dueDate  DateTime        @db.Date
-  status   DbsRecordStatus @default(PENDING)
+  amount  Decimal         @db.Decimal(18, 4)
+  dueDate DateTime        @db.Date
+  status  DbsRecordStatus @default(PENDING)
 
-  rejectReason String? @db.VarChar(280)
+  rejectReason String?   @db.VarChar(280)
   collectedAt  DateTime? @db.Timestamptz(6)
 
   /// Tahsil edildiginde olusan tahsilat kaydi.
@@ -1666,7 +1670,7 @@ model EDocument {
   sizeBytes   Int    @default(0)
 
   /// Entegrator tarafindaki kimlik - itirazlarda saglayiciya bu verilir.
-  providerRef String? @db.VarChar(64)
+  providerRef  String? @db.VarChar(64)
   errorMessage String? @db.VarChar(500)
 
   sentAt    DateTime? @db.Timestamptz(6)
@@ -1770,7 +1774,7 @@ model SalesTarget {
   /// YYYY-AA
   period String @db.VarChar(7)
 
-  targetAmount Decimal @db.Decimal(18, 4)
+  targetAmount   Decimal @db.Decimal(18, 4)
   /// Prim orani (yuzde). Hedefin altinda kalindiysa prim hesaplanmaz.
   commissionRate Decimal @default(0) @db.Decimal(5, 2)
   currency       String  @default("TRY") @db.VarChar(3)
@@ -1782,4 +1786,142 @@ model SalesTarget {
   @@unique([salesRepUserId, period])
   @@index([tenantId, period])
   @@map("sales_targets")
+}
+
+// ===========================================================================
+// BILDIRIM
+//
+// Bildirim, gonderilip gonderilmedigi SORULABILIR bir kayittir. "Vade
+// hatirlatmasi gitti mi?" sorusu tahsilat gorusmesinin ilk sorusudur ve
+// cevabi "gondermis olmaliyiz" olamaz.
+// ===========================================================================
+
+enum NotificationChannel {
+  EMAIL
+  PUSH
+}
+
+enum NotificationTopic {
+  ORDER_STATUS
+  ORDER_APPROVAL_PENDING
+  PAYMENT_RECEIVED
+  DUE_DATE_REMINDER
+  SECURITY
+  INTEGRATION_ALERT
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  SUPPRESSED
+}
+
+/// Gonderim kuyrugu ve kaydi.
+///
+/// KUYRUK OUTBOX'TAN AYRIDIR. Outbox, siparisin Logo'ya ulasmasini garanti
+/// eder; orada birikmis bir e-posta hatasi siparis aktarimini geciktirir.
+/// Muhasebe sisteminin beklemesi ile bir hatirlatma e-postasinin gecikmesi
+/// ayni agirlikta degildir ve ayni kuyrukta olmamalidirlar.
+///
+/// ICERIK KUYRUGA YAZILIRKEN URETILIR ve donar. Gonderim aninda yeniden
+/// uretmek, aradan gecen surede degisen bir tutarla (iade faturasi, kismi
+/// iptal) kullanicinin o an bildirilmis olmasi gerekenden BASKA bir mesaj
+/// gondermek olurdu; gonderilmis bildirim de bir belgedir.
+model NotificationMessage {
+  id       BigInt @id @default(autoincrement())
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  topic   NotificationTopic
+  channel NotificationChannel
+
+  /// Kullanici silinse bile kayit durur: gonderilmis bir bildirim, alicinin
+  /// hesabinin akibetinden bagimsiz olarak yasanmis bir olaydir.
+  recipientUserId String? @db.Uuid
+  recipientUser   User?   @relation("NotificationRecipient", fields: [recipientUserId], references: [id], onDelete: SetNull)
+
+  /// Kuyruga yazilirken DONDURULAN adres (e-posta veya cihaz jetonu ozeti).
+  /// Kullanici adresini sonra degistirdiginde, gecmis kaydin hangi adrese
+  /// gittigi degismemelidir - aksi halde kayit delil olmaktan cikar.
+  recipient     String  @db.VarChar(254)
+  recipientName String? @db.VarChar(120)
+
+  subject String @db.VarChar(200)
+  body    String @db.Text
+
+  /// Ayni olayin ikinci kez gonderilmesini engelleyen anahtar.
+  /// Geri alinamayan tek islem gonderilmis iletidir; "iki kez odeme aldik"
+  /// diyen bir hatirlatma, tahsilat gorusmesini bastan kaybettirir.
+  dedupeKey String @db.VarChar(160)
+
+  status           NotificationStatus @default(PENDING)
+  attempts         Int                @default(0)
+  maxAttempts      Int                @default(6)
+  nextAttemptAt    DateTime           @default(now()) @db.Timestamptz(6)
+  lastError        String?            @db.VarChar(1000)
+  /// SUPPRESSED kayitlarda sebep ("tercih kapali", "adres yok", "kor mod").
+  suppressedReason String?            @db.VarChar(200)
+
+  lockedBy String?   @db.VarChar(64)
+  lockedAt DateTime? @db.Timestamptz(6)
+
+  /// Ilgili kayit - ekrandan siparise/belgeye gitmek icin.
+  relatedType String? @db.VarChar(40)
+  relatedId   String? @db.VarChar(64)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  sentAt    DateTime? @db.Timestamptz(6)
+
+  @@unique([tenantId, dedupeKey])
+  @@index([status, nextAttemptAt])
+  @@index([tenantId, createdAt])
+  @@index([recipientUserId, createdAt])
+  @@map("notification_messages")
+}
+
+/// Kullanicinin konu+kanal tercihi.
+///
+/// Satir YOKSA varsayilan gecerlidir (bkz. DEFAULT_PREFERENCES). Kurulumda
+/// her kullanici icin on iki satir uretmek, varsayilan degistiginde gecmis
+/// kullanicilari eski davranista birakirdi.
+model NotificationPreference {
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  topic   NotificationTopic
+  channel NotificationChannel
+  enabled Boolean
+
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@id([userId, topic, channel])
+  @@map("notification_preferences")
+}
+
+/// Mobil bildirim cihazi.
+///
+/// Jetonun kendisi degil SHA-256 ozeti loglanir; jeton, cihaza bildirim
+/// gonderebilen bir yetkidir ve kayit tablosunda acik durmasi gerekmez.
+model PushDevice {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  platform  ClientPlatform
+  token     String         @db.VarChar(255)
+  /// Kayit ve gunluklerde jetonun yerine bu gecer.
+  tokenHash String         @db.Char(64)
+
+  deviceName String?   @db.VarChar(80)
+  lastSeenAt DateTime  @default(now()) @db.Timestamptz(6)
+  revokedAt  DateTime? @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+
+  /// Ayni jeton baska bir kullaniciya gecebilir (ortak cihaz, personel
+  /// degisikligi). Jeton benzersizdir; eski kaydin sahibi degisir, boylece
+  /// isten ayrilan personelin telefonuna sonraki siparisler dusmez.
+  @@unique([token])
+  @@index([userId, revokedAt])
+  @@map("push_devices")
 }
