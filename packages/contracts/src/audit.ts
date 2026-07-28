@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 /**
  * ToptanPortal - Yasal Delil Loglama Sozlugu
  *
@@ -82,6 +84,47 @@ export const AuditAction = {
 
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];
 
+/**
+ * Aksiyon kodunu okunabilir etiketle eslestirir.
+ *
+ * Etiket BULUNAMAZSA kodun kendisi gosterilir - yeni bir aksiyon eklendiginde
+ * denetim ekrani bos hucre gostermez, ham kodu gosterir. Delil sunumunda
+ * "bilinmeyen" yazan bir satir, hic olmayan bir satirdan daha kotudur.
+ */
+export function auditActionLabel(action: string): string {
+  return AUDIT_ACTION_LABELS[action] ?? action;
+}
+
+export const AUDIT_ACTION_LABELS: Record<string, string> = {
+  'auth.login.success': 'Giriş yapıldı',
+  'auth.login.failed': 'Giriş başarısız',
+  'auth.login.blocked': 'Giriş engellendi',
+  'auth.mfa.challenged': '2FA istendi',
+  'auth.mfa.success': '2FA doğrulandı',
+  'auth.mfa.failed': '2FA başarısız',
+  'auth.mfa.enrolled': '2FA kaydı yapıldı',
+  'auth.mfa.reset': '2FA sıfırlandı',
+  'auth.recovery-code.used': 'Kurtarma kodu kullanıldı',
+  'auth.token.refreshed': 'Oturum yenilendi',
+  'auth.token.reuse-detected': 'Jeton yeniden kullanımı tespit edildi',
+  'auth.logout': 'Çıkış yapıldı',
+  'auth.session.revoked': 'Oturum sonlandırıldı',
+  'finance.blind-order.applied': 'Kör Sipariş süzgeci uygulandı',
+  'order.draft.created': 'Sepet oluşturuldu',
+  'order.submitted-for-approval': 'Sipariş onaya gönderildi',
+  'order.approved': 'Sipariş onaylandı',
+  'order.rejected': 'Sipariş reddedildi',
+  'order.placed': 'Sipariş oluşturuldu',
+  'order.cancelled': 'Sipariş iptal edildi',
+  'order.risk.blocked': 'Sipariş risk nedeniyle durduruldu',
+  'payment.initiated': 'Tahsilat başlatıldı',
+  'payment.succeeded': 'Tahsilat tamamlandı',
+  'payment.failed': 'Tahsilat başarısız',
+  'integration.logo.sync.started': 'Logo senkronu başladı',
+  'integration.logo.sync.completed': 'Logo senkronu tamamlandı',
+  'integration.logo.sync.failed': 'Logo senkronu başarısız',
+};
+
 export const AuditActorType = {
   USER: 'USER',
   SYSTEM: 'SYSTEM',
@@ -133,3 +176,75 @@ function normalizeForCanonical(value: unknown): unknown {
 
 /** Zincirin ilk halkasinin onceki hash degeri (64 karakter sifir). */
 export const AUDIT_GENESIS_HASH = '0'.repeat(64);
+
+// ---------------------------------------------------------------------------
+// Denetim kaydi sorgulama
+// ---------------------------------------------------------------------------
+
+export const auditQuerySchema = z.object({
+  action: z.string().trim().max(80).optional(),
+  actorEmail: z.string().trim().max(254).optional(),
+  resourceType: z.string().trim().max(60).optional(),
+  resourceId: z.string().trim().max(64).optional(),
+  companyId: z.string().uuid().optional(),
+  outcome: z.enum(['SUCCESS', 'FAILURE', 'DENIED']).optional(),
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  offset: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+export type AuditQuery = z.infer<typeof auditQuerySchema>;
+
+export const auditEntrySchema = z.object({
+  id: z.string(),
+  /** Kiraci icindeki bosluksuz sira numarasi. Bosluk = silinmis kayit. */
+  seq: z.string(),
+  occurredAt: z.string(),
+  actorType: z.string(),
+  actorEmail: z.string().nullable(),
+  actorRole: z.string().nullable(),
+  action: z.string(),
+  actionLabel: z.string(),
+  outcome: z.string(),
+  resourceType: z.string().nullable(),
+  resourceId: z.string().nullable(),
+  companyId: z.string().nullable(),
+  ip: z.string().nullable(),
+  requestId: z.string().nullable(),
+  payload: z.record(z.unknown()),
+  /** Zincir ozeti - delil sunumunda bu deger karsilastirilir. */
+  hash: z.string(),
+});
+
+export type AuditEntry = z.infer<typeof auditEntrySchema>;
+
+export const auditPageSchema = z.object({
+  entries: z.array(auditEntrySchema),
+  totalCount: z.number().int(),
+  hasMore: z.boolean(),
+  /**
+   * Zincirin son halkasi. Arayuz bunu gosterir ki delil sunumu yapan kisi,
+   * ekrandaki kayitlarin hangi zincir noktasina kadar dogrulandigini bilsin.
+   */
+  chainHead: z.object({ lastSeq: z.string(), lastHash: z.string() }).nullable(),
+});
+
+export type AuditPage = z.infer<typeof auditPageSchema>;
+
+/**
+ * Zincir dogrulama sonucu.
+ *
+ * `verifiedCount` ile `totalCount` FARKLI olabilir: dogrulama pahalidir ve
+ * ekrandan tetiklenen kontrol son N kaydi tarar. Tam tarama komut satirindan
+ * yapilir (`pnpm --filter @toptanportal/db verify-audit`).
+ */
+export const auditVerifyResultSchema = z.object({
+  valid: z.boolean(),
+  verifiedCount: z.number().int(),
+  /** Zincirin ilk kirildigi sira numarasi. */
+  brokenAtSeq: z.string().nullable(),
+  message: z.string(),
+});
+
+export type AuditVerifyResult = z.infer<typeof auditVerifyResultSchema>;
