@@ -23,6 +23,9 @@ import type {
   CartItemInput,
   CartView,
   AssignRepRequest,
+  AuditPage,
+  AuditQuery,
+  AuditVerifyResult,
   BulkImportResult,
   CardPaymentForm,
   CatalogPage,
@@ -619,6 +622,17 @@ export const fieldApi = {
 
   upsertTarget: (body: UpsertSalesTargetRequest) =>
     request<SalesTarget>('/sales-targets', { method: 'POST', body }),
+};
+
+// ---------------------------------------------------------------------------
+// Denetim kayitlari (yalnizca AUDIT_LOG_VIEW)
+// ---------------------------------------------------------------------------
+
+export const auditApi = {
+  list: (query: Partial<AuditQuery> = {}) =>
+    request<AuditPage>(`/audit${toQuery({ ...query })}`),
+
+  verify: () => request<AuditVerifyResult>('/audit/verify', { method: 'POST' }),
 };
 
 export { emitSessionChange };
