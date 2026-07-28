@@ -101,12 +101,37 @@ hash(n) = SHA256( hash(n-1) || "." || kanonikJSON(kayıt(n)) )
 - `audit_logs` tablosunda `UPDATE`, `DELETE` ve `TRUNCATE` veritabanı tetikleyicisiyle **engellenir** — uygulama kullanıcısı dahil kimse geçmişi değiştiremez
 - Finansal aksiyonlarda log yazımı iş verisiyle **aynı işlemde** yapılır: log yazılamıyorsa işlem de tamamlanmaz
 - Zincir denetimi: `pnpm --filter @toptanportal/db verify-audit` (günlük cron ve delil sunumu öncesi çalıştırılır)
+- Sorgulama ekranı: `/panel/denetim` (yalnızca Süper Admin). Üst şeritte zincirin son halkası (sıra numarası + özet) durur — delil sunan kişi, ekrandaki kayıtların hangi zincir noktasına kadar doğrulandığını bilmelidir. Ekran bir **gözetim** aracı değil delil sunum aracıdır; yetkinin dar tutulmasının sebebi budur.
 
 ### KVKK
 
 - Telefon gibi kişisel alanlar AES-256-GCM ile şifreli tutulur (`*_enc`), arama için HMAC-SHA256 blind index kullanılır (`*_idx`)
 - Şifreli metne anahtar kimliği gömülüdür; anahtar rotasyonunda eski kayıtlar yeniden şifrelenmeden okunur
 - Denetim kaydı `payload` alanı; şifre, jeton, TOTP anahtarı ve kart verisi gibi alanları yazmadan önce maskeler
+
+### Kullanıcı yönetimi
+
+Ekran `/panel/kullanicilar`. İşletme ana yetkilisi yalnızca kendi işletmesinin kullanıcılarını yönetir (`USER_MANAGE_COMPANY`), Süper Admin tümünü (`USER_MANAGE_ALL`). Kapsam sorguya girer, sonradan süzülmez.
+
+- **Yetki yükseltme engellenir:** kimse kendi rolünden geniş yetkili bir rol açamaz. İşletme yetkilisi toptancı tarafı rollerini (Süper Admin, Plasiyer) açabilseydi kendine bir plasiyer hesabı açıp *tüm* bayilerin portföyünü görürdü — bu, rol sisteminin tamamını anlamsız kılar.
+- **Geçici şifreyi sunucu üretir.** Yöneticinin belirlediği bir şifre, kullanıcının şifresini bilen ikinci bir kişi demektir; o hesapla yapılan işlemin kime ait olduğu tartışmalı hale gelir ve denetim kaydının delil değeri düşer.
+- **Askıya alma açık oturumları da kapatır.** Yalnızca durumu değiştirmek, erişimi jeton süresi dolana kadar sürdürürdü — işten çıkarılan bir kullanıcı için bu süre çok uzundur.
+- **Harcama limiti kullanıcı bazındadır** ve işletmenin risk limitinden ayrıdır: bir barista sipariş verebilir ama 50.000 TL'lik sipariş veremez.
+
+### Toplu sipariş (Excel / yapıştırma)
+
+Ekran `/panel/toplu-siparis`, uç `POST /cart/bulk-import`. Bayilerin çoğu sipariş listesini hâlâ Excel'de tutar; bu akış portalin benimsenmesini çalışma alışkanlığının değişmesine bağlı olmaktan çıkarır. Hem dosya sürükleme hem doğrudan yapıştırma desteklenir — kullanıcıların çoğu hücreleri kopyalar, dosyayı kaydetmez.
+
+- **Ayraç** noktalı virgül, virgül veya sekme olabilir; birim dosyada taşınmaz, ürünün sipariş birimi (genelde koli) varsayılır.
+- **`1.250` bin iki yüz ellidir.** Bir virgül iki yüz elli okumak siparişi 1000 kat küçültür ve bunu kimse dosyayı yüklerken fark etmez. Ayrımı son ayraçtan sonraki hane sayısı belirler: iki veya daha az hane → ondalık, fazlası → binlik.
+- **Başlık satırı sessizce atlanır** (`Stok Kodu;Adet` yazan satır kullanıcının hatası değil alışkanlığıdır); okunamayan *diğer* satırlar satır numarasıyla raporlanır.
+- **Aynı kod iki satırda geçiyorsa miktarlar toplanır.** Son satırı kazanan bir mantık, siparişin bir kısmını sessizce düşürürdü.
+- Sonuç raporu eksiksizdir: kaç satır okundu, kaçı sepete girdi, hangileri eşleşmedi. "37 kalem eklendi" demek yetmez — kullanıcı 40 satır yüklediğini bilir ve eksiği aramak zorunda kalmamalıdır.
+- Kurallar `apps/api/src/cart/bulk-import.service.spec.ts` ile kilitlenmiştir.
+
+### Fiyat listeleri
+
+Ekran `/panel/fiyat-listeleri` (`PRICE_LIST_MANAGE`) **salt okunurdur; düzenleme düğmesi yoktur.** Fiyatlar Logo'dan senkronlanır. Fiyatı portalden değiştirmek, iki sistem arasında hangisinin doğru olduğu belirsiz bir alan yaratır ve bir sonraki senkron o değişikliği sessizce geri alır — kullanıcı da neden geri alındığını asla anlamaz. Ekranın işi fiyatı değiştirmek değil, "bu bayi bu ürünü kaçtan alıyor" sorusunu cevaplamaktır; o soru her gün telefonda sorulur.
 
 ### Cari hesap, ekstre ve tahsilat
 
@@ -210,12 +235,12 @@ Tasarım ilkeleri: birincil eylemler ekranın alt şeridinde sabit durur (bir el
 
 ## Sıradaki modüller
 
-1. **On-prem köprü servisi (.NET 8)** — Logo Object Service ve MSSQL erişimi, mTLS sunucusu
-2. **e-Belge üretim hattı** — entegratör bağlantısı, UBL-TR üretimi, GİB durum takibi (arşiv ve sunum tarafı hazır)
+1. **e-Belge üretim hattı** — entegratör bağlantısı, UBL-TR üretimi, GİB durum takibi (arşiv ve sunum tarafı hazır)
+2. **On-prem köprünün saha sertleştirmesi** — iskelet hazır (`apps/logo-bridge`); Logo Object Service çağrıları müşteri kurulumunda doğrulanacak
 3. **Xcode proje hedefi** — iOS kaynakları hazır; `.xcodeproj` oluşturulup CI'a bağlanacak
-4. **Toplu sipariş (Excel)** — `Stok Kodu;Adet` dosyasından sepet oluşturma
+4. **Bildirim kanalı** — sipariş durumu ve vade hatırlatması için e-posta / push
 
-Tamamlananlar: stok rezervasyonu ve sipariş motoru, matris fiyat ve kademeli iskonto, cari hesap / ekstre / yaşlandırma, tahsilat kaydı, sipariş risk kalkanı, Logo entegrasyonunun bulut tarafı, 3D Secure sanal POS, DBS, e-Belge arşivi, saha yönetimi ve iOS uygulamasının çekirdek akışları.
+Tamamlananlar: stok rezervasyonu ve sipariş motoru, matris fiyat ve kademeli iskonto, cari hesap / ekstre / yaşlandırma, tahsilat kaydı, sipariş risk kalkanı, Logo entegrasyonunun bulut tarafı ve köprü iskeleti, 3D Secure sanal POS, DBS, e-Belge arşivi, saha yönetimi, toplu sipariş içe aktarımı, kullanıcı yönetimi, denetim kaydı sorgulama ve iOS uygulamasının çekirdek akışları.
 
 Temel altyapı (`OutboxEvent`, `IdempotencyKey`, denetim zinciri) bu modüller için şemada hazırdır.
 
