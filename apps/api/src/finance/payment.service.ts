@@ -18,11 +18,13 @@ import {
   AccountEntryKind,
   PaymentStatus as PaymentStatusEnum,
   Prisma,
+  UserStatus,
   type PrismaTransactionClient,
 } from '@toptanportal/db';
 import {
   AuditAction,
   ErrorCode,
+  NotificationTopic,
   PAYMENT_METHOD_LABELS,
   PAYMENT_STATUS_LABELS,
   Permission,
@@ -38,6 +40,7 @@ import { AuditService } from '../common/audit/audit.service';
 import { ApiException } from '../common/exceptions/api.exception';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CompanyScopeService } from '../common/context/company-scope.service';
+import { NotificationService } from '../notification/notification.service';
 import type { AuthenticatedPrincipal } from '../common/context/request-context';
 import { Decimal, money } from '../pricing/pricing.types';
 import { AccountService, parseDate, todayUtc, toIsoDate } from './account.service';
@@ -65,6 +68,7 @@ export class PaymentService {
     private readonly scope: CompanyScopeService,
     private readonly account: AccountService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationService,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -295,7 +299,59 @@ export class PaymentService {
       tx,
     );
 
+    await this.tahsilatBildirimi(tx, payment, amount.toNumber(), allocations.length);
+
     return updated;
+  }
+
+  /**
+   * Tahsilat bildirimi.
+   *
+   * Bu bildirim bir TESEKKUR degil, MUTABAKAT araci: bayi parayi gonderdikten
+   * sonra "islendi mi?" diye arar ve o arama, tahsilat masasinin en sik
+   * yaptigi istir. Bildirim gitmezse telefon calar.
+   *
+   * Alici, bakiye gormeye yetkili isletme kullanicilaridir - konu parasaldir
+   * ve Kor Siparis Modundaki kullaniciya hic uretilmez (bkz.
+   * NotificationService.aliciUygunMu).
+   */
+  private async tahsilatBildirimi(
+    tx: PrismaTransactionClient,
+    payment: PaymentRow,
+    amount: number,
+    allocatedDocuments: number,
+  ): Promise<void> {
+    const alicilar = await tx.user.findMany({
+      where: {
+        companyId: payment.companyId,
+        tenantId: payment.tenantId,
+        status: UserStatus.ACTIVE,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+
+    await this.notifications.enqueue(
+      {
+        tenantId: payment.tenantId,
+        payload: {
+          topic: NotificationTopic.PAYMENT_RECEIVED,
+          amount,
+          currency: payment.currency,
+          methodLabel: PAYMENT_METHOD_LABELS[payment.method],
+          companyTitle: payment.company?.title ?? '',
+          /* Tek belge kapandiysa numarasi yazilir; birkac belge kapandiysa
+             hangisinin yazilacagi belirsizdir ve yanlisini yazmak, ekstreyi
+             bastan sona kontrol ettirir. */
+          documentNumber: allocatedDocuments === 1 ? buildReceiptNumber(payment) : null,
+        },
+        recipientUserIds: alicilar.map((alici) => alici.id),
+        dedupeKey: `payment:${payment.id}:confirmed`,
+        relatedType: 'Payment',
+        relatedId: payment.id,
+      },
+      tx,
+    );
   }
 
   /**

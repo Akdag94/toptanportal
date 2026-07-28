@@ -16,6 +16,7 @@ import { Prisma, UserStatus } from '@toptanportal/db';
 import { randomBytes } from 'node:crypto';
 import {
   ErrorCode,
+  NotificationTopic,
   Permission,
   ROLE_LABELS,
   SUPPLIER_SIDE_ROLES,
@@ -31,6 +32,7 @@ import {
 
 import { ApiException } from '../common/exceptions/api.exception';
 import { CryptoService } from '../common/crypto/crypto.service';
+import { NotificationService } from '../notification/notification.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { AuthenticatedPrincipal } from '../common/context/request-context';
 
@@ -46,6 +48,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
+    private readonly notifications: NotificationService,
   ) {}
 
   async list(principal: AuthenticatedPrincipal, query: UserListQuery): Promise<UserPage> {
@@ -161,6 +164,23 @@ export class UsersService {
         data: { revokedAt: new Date() },
       });
     }
+
+    /* Askiya alinan kullaniciya da bildirim gider - hatta ASIL o gitmelidir:
+       erisimi kesilen kisi, bunun bir ariza mi karar mi oldugunu bilmelidir.
+       Bildirim konusu guvenliktir ve guvenlik bildirimi hesap durumundan
+       bagimsiz gonderilir (bkz. NotificationService.aliciUygunMu). */
+    await this.notifications.enqueue({
+      tenantId: principal.tenantId,
+      payload: {
+        topic: NotificationTopic.SECURITY,
+        eventLabel: status === 'ACTIVE' ? 'Hesabınız yeniden etkinleştirildi' : 'Hesabınız askıya alındı',
+        occurredAt: new Date().toISOString(),
+      },
+      recipientUserIds: [hedef.id],
+      dedupeKey: `security:${hedef.id}:status:${status}:${Date.now()}`,
+      relatedType: 'User',
+      relatedId: hedef.id,
+    });
 
     return this.toView(guncel);
   }

@@ -21,13 +21,17 @@ import {
   OrderChannel,
   OrderStatus,
   Prisma,
+  UserStatus,
   type PrismaTransactionClient,
 } from '@toptanportal/db';
 import {
   AuditAction,
   ErrorCode,
+  NotificationTopic,
   ORDER_STATUS_LABELS,
   Permission,
+  ROLE_PERMISSIONS,
+  UserRole,
   canSeeFinancials,
   roleHasPermission,
   type OrderListQuery,
@@ -45,6 +49,7 @@ import { requireCompanyContext } from '../common/context/company-context';
 import type { AuthenticatedPrincipal } from '../common/context/request-context';
 import { CartService } from '../cart/cart.service';
 import { Decimal, type PricedLine } from '../pricing/pricing.types';
+import { NotificationService } from '../notification/notification.service';
 import { StockService, StockShortageError } from '../stock/stock.service';
 import { OrderNumberService } from './order-number.service';
 import { SpendingLimitService } from './spending-limit.service';
@@ -93,7 +98,21 @@ export class OrderService {
     private readonly spendingLimit: SpendingLimitService,
     private readonly outbox: OutboxService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationService,
   ) {}
+
+  /**
+   * Siparisi onaylayabilecek kisiler.
+   *
+   * Onay yetkisi ROLDEN gelir; listeyi rol matrisinden turetmek, ileride yeni
+   * bir isletme rolu eklendiginde bu sorgunun sessizce eksik kalmasini onler.
+   */
+  private static readonly ONAYCI_ROLLERI = (Object.keys(ROLE_PERMISSIONS) as UserRole[]).filter(
+    (role) =>
+      role !== UserRole.SUPER_ADMIN &&
+      role !== UserRole.SALES_REP &&
+      ROLE_PERMISSIONS[role].includes(Permission.ORDER_APPROVE),
+  );
 
   // -------------------------------------------------------------------------
   // Siparis olusturma
@@ -227,6 +246,15 @@ export class OrderService {
             tx,
           );
 
+          /* Onaya dusen siparisin stogu REZERVEDIR. Onaycinin haberi olmazsa
+             o stok, kimsenin bakmadigi bir siparis icin depoda bekler -
+             toptancinin en pahali sessiz kaybi budur. Bildirim bu yuzden
+             siparisle AYNI ISLEMDE yazilir: siparis var, bildirim yok hali
+             tam olarak o kaybi uretir. */
+          if (decision.requiresApproval) {
+            await this.onayBildirimi(tx, created, priced.lines.length, principal.userId);
+          }
+
           return created;
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 20000 },
@@ -302,6 +330,8 @@ export class OrderService {
         tx,
       );
 
+      await this.durumBildirimi(tx, next, principal.userId, null);
+
       return next;
     });
 
@@ -356,6 +386,10 @@ export class OrderService {
         },
         tx,
       );
+
+      /* Red sebebi bildirimin EN DEGERLI parcasidir: "reddedildi" diyen bir
+         mesaj, kullaniciyi telefona sarilmaktan kurtarmaz. */
+      await this.durumBildirimi(tx, next, principal.userId, reason);
 
       return next;
     });
@@ -415,6 +449,8 @@ export class OrderService {
         tx,
       );
 
+      await this.durumBildirimi(tx, next, principal.userId, null);
+
       return next;
     });
 
@@ -469,6 +505,89 @@ export class OrderService {
   // -------------------------------------------------------------------------
   // Yardimcilar
   // -------------------------------------------------------------------------
+
+  /**
+   * Onay bekleyen siparis bildirimi.
+   *
+   * Siparisi GONDEREN kisi listeden cikarilir: kendi siparisini onaylayamayan
+   * kullaniciya "onayiniz bekleniyor" yazmak, yapamayacagi bir is icin
+   * hatirlatma gondermektir.
+   */
+  private async onayBildirimi(
+    tx: PrismaTransactionClient,
+    order: OrderRow,
+    lineCount: number,
+    createdByUserId: string,
+  ): Promise<void> {
+    const onaycilar = await tx.user.findMany({
+      where: {
+        companyId: order.companyId,
+        tenantId: order.tenantId,
+        status: UserStatus.ACTIVE,
+        deletedAt: null,
+        role: { in: OrderService.ONAYCI_ROLLERI },
+        id: { not: createdByUserId },
+      },
+      select: { id: true },
+    });
+
+    await this.notifications.enqueue(
+      {
+        tenantId: order.tenantId,
+        payload: {
+          topic: NotificationTopic.ORDER_APPROVAL_PENDING,
+          orderNumber: order.orderNumber,
+          requestedByName: order.createdBy?.fullName ?? 'Bir kullanıcı',
+          grandTotal: order.grandTotal.toNumber(),
+          currency: order.currency,
+          lineCount,
+        },
+        recipientUserIds: onaycilar.map((onayci) => onayci.id),
+        dedupeKey: `order:${order.id}:approval`,
+        relatedType: 'Order',
+        relatedId: order.id,
+      },
+      tx,
+    );
+  }
+
+  /**
+   * Siparis durumu bildirimi.
+   *
+   * Alici, siparisi GIREN kisidir - durumu degistiren kisi degil. Kendi
+   * yaptigi islemi kendisine bildirmek, bildirimleri okunmadan silinen bir
+   * yigina cevirir.
+   */
+  private async durumBildirimi(
+    tx: PrismaTransactionClient,
+    order: OrderRow,
+    actorUserId: string,
+    reason: string | null,
+  ): Promise<void> {
+    if (order.createdByUserId === actorUserId) return;
+
+    await this.notifications.enqueue(
+      {
+        tenantId: order.tenantId,
+        payload: {
+          topic: NotificationTopic.ORDER_STATUS,
+          orderNumber: order.orderNumber,
+          statusLabel: ORDER_STATUS_LABELS[order.status],
+          companyTitle: order.company.title,
+          grandTotal: order.grandTotal.toNumber(),
+          currency: order.currency,
+          reason,
+        },
+        recipientUserIds: [order.createdByUserId],
+        /* Durum anahtara girer: ayni siparis icin onay ve iptal iki ayri
+           bildirimdir, ikincisinin tekillestirmeye takilmamasi gerekir. */
+        dedupeKey: `order:${order.id}:${order.status}`,
+        relatedType: 'Order',
+        relatedId: order.id,
+      },
+      tx,
+    );
+  }
 
   /**
    * Cari risk kontrolu.

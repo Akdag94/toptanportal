@@ -26,6 +26,7 @@ import {
   AuditAction,
   ErrorCode,
   LoginOutcome,
+  NotificationTopic,
   ROLE_LABELS,
   ROLE_PRIMARY_PLATFORM,
   getPermissionsForRole,
@@ -57,6 +58,7 @@ import { AuditService } from '../common/audit/audit.service';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { RedisService } from '../common/redis/redis.service';
+import { NotificationService } from '../notification/notification.service';
 import { ApiException } from '../common/exceptions/api.exception';
 import { getRequestContext } from '../common/context/request-context';
 import { isIpAllowed } from '../common/net/ip.util';
@@ -85,6 +87,7 @@ export class AuthService {
     private readonly totpService: TotpService,
     private readonly auditService: AuditService,
     private readonly redis: RedisService,
+    private readonly notifications: NotificationService,
     configService: ConfigService,
   ) {
     this.config = configService.getOrThrow<AppConfig>('app');
@@ -593,6 +596,25 @@ export class AuthService {
           resourceType: 'user',
           resourceId: userId,
           payload: { forced: user.mustChangePassword },
+        },
+        tx,
+      );
+
+      /* Sifre degisikligi bildirimi, hesabi ele gecirilen kullanicinin
+         durumu ogrenmesinin TEK yoludur: saldirganin ilk isi sifreyi
+         degistirmek ve oturumlari kapatmaktir. Bu yuzden konu kapatilamaz
+         (MANDATORY_TOPICS) ve kayit sifre degisikligiyle ayni islemde
+         yazilir - islem geri alinirsa bildirim de olusmaz. */
+      await this.notifications.enqueue(
+        {
+          tenantId,
+          payload: {
+            topic: NotificationTopic.SECURITY,
+            eventLabel: 'Şifre değiştirildi',
+            occurredAt: new Date().toISOString(),
+          },
+          recipientUserIds: [userId],
+          dedupeKey: `security:${userId}:password:${Date.now()}`,
         },
         tx,
       );
