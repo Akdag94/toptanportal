@@ -9,4 +9,5 @@ export * from './finance.schema';
 export * from './integration.schema';
 export * from './pos.schema';
 export * from './einvoice.schema';
+export * from './field.schema';
 export * from './errors';
