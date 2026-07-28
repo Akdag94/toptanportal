@@ -37,6 +37,9 @@ import type {
   DbsImportResult,
   DeadEventView,
   EDocumentFormat,
+  InviteUserRequest,
+  InviteUserResult,
+  ManagedUser,
   EDocumentLink,
   EDocumentPage,
   EDocumentQuery,
@@ -59,12 +62,15 @@ import type {
   StatementQuery,
   SalesTarget,
   SalesTargetQuery,
+  SetSpendingLimitRequest,
   StartCardPaymentRequest,
   StockShortage,
   SyncChannel,
   SyncRunResult,
   TokenPair,
   UpsertSalesTargetRequest,
+  UserListQuery,
+  UserPage,
   VisitNote,
   VisitNotePage,
   VisitNoteQuery,
@@ -633,6 +639,28 @@ export const auditApi = {
     request<AuditPage>(`/audit${toQuery({ ...query })}`),
 
   verify: () => request<AuditVerifyResult>('/audit/verify', { method: 'POST' }),
+};
+
+// ---------------------------------------------------------------------------
+// Kullanici yonetimi
+// ---------------------------------------------------------------------------
+
+export const userApi = {
+  list: (query: Partial<UserListQuery> = {}) =>
+    request<UserPage>(`/users${toQuery({ ...query })}`),
+
+  /**
+   * Kullanici davet eder. Yanittaki gecici sifre YALNIZCA bu cagrida gelir;
+   * arayuz onu kullaniciya gostermeden kaybederse yeniden alinamaz.
+   */
+  invite: (body: InviteUserRequest) =>
+    request<InviteUserResult>('/users', { method: 'POST', body }),
+
+  setStatus: (userId: string, status: 'ACTIVE' | 'SUSPENDED') =>
+    request<ManagedUser>(`/users/${userId}/status`, { method: 'POST', body: { status } }),
+
+  setSpendingLimit: (userId: string, body: SetSpendingLimitRequest) =>
+    request<ManagedUser>(`/users/${userId}/spending-limit`, { method: 'POST', body }),
 };
 
 export { emitSessionChange };
