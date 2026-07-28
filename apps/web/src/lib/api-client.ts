@@ -24,7 +24,9 @@ import type {
   CartView,
   CatalogPage,
   CatalogProduct,
+  DeadEventView,
   ErrorCode,
+  IntegrationStatus,
   LoginResponse,
   OrderListQuery,
   OrderTemplateView,
@@ -39,6 +41,8 @@ import type {
   StatementPage,
   StatementQuery,
   StockShortage,
+  SyncChannel,
+  SyncRunResult,
   TokenPair,
 } from '@toptanportal/contracts';
 
@@ -478,6 +482,37 @@ export const financeApi = {
       method: 'POST',
       body: { reason },
     }),
+};
+
+// ---------------------------------------------------------------------------
+// Logo entegrasyonu (yalnizca INTEGRATION_MANAGE yetkisi)
+// ---------------------------------------------------------------------------
+
+export const integrationApi = {
+  status: () => request<IntegrationStatus>('/integration/status'),
+
+  /** Köprüyü şimdi yoklar ve tazelenmiş durumu döner. */
+  probe: () => request<IntegrationStatus>('/integration/probe', { method: 'POST' }),
+
+  deadEvents: () => request<DeadEventView[]>('/integration/dead-events'),
+
+  retryDeadEvents: (eventIds?: string[]) =>
+    request<{ requeued: number }>('/integration/dead-events/retry', {
+      method: 'POST',
+      body: { eventIds },
+    }),
+
+  sync: (channel: SyncChannel, fullResync = false) =>
+    request<SyncRunResult | null>('/integration/sync', {
+      method: 'POST',
+      body: { channel, fullResync },
+    }),
+
+  toggleChannel: (channel: SyncChannel, enabled: boolean) =>
+    request<IntegrationStatus>(
+      `/integration/channels/toggle${toQuery({ channel, enabled })}`,
+      { method: 'POST' },
+    ),
 };
 
 export { emitSessionChange };
