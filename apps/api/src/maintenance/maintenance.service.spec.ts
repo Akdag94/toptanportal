@@ -11,6 +11,7 @@ import { Logger } from '@nestjs/common';
 
 import type { IdempotencyService } from '../common/idempotency/idempotency.service';
 import type { PrismaService } from '../common/prisma/prisma.service';
+import type { IntegrationService } from '../integration/integration.service';
 import type { StockService } from '../stock/stock.service';
 import type { LeaderLockService } from './leader-lock.service';
 import { MaintenanceService } from './maintenance.service';
@@ -22,6 +23,9 @@ interface Overrides {
   deadCount?: number;
   lockAcquired?: boolean;
   enabled?: boolean;
+  tenants?: { id: string; code: string }[];
+  trigger?: jest.Mock;
+  probe?: jest.Mock;
 }
 
 function build(overrides: Overrides = {}) {
@@ -32,6 +36,11 @@ function build(overrides: Overrides = {}) {
       JOB_IDEMPOTENCY_PURGE_SECONDS: 3600,
       JOB_OUTBOX_WATCH_SECONDS: 300,
       OUTBOX_STALE_MINUTES: 15,
+      JOB_ORDER_DISPATCH_SECONDS: 30,
+      JOB_STOCK_SYNC_SECONDS: 120,
+      JOB_PRICE_SYNC_SECONDS: 1800,
+      JOB_ACCOUNT_SYNC_SECONDS: 900,
+      JOB_BRIDGE_PROBE_SECONDS: 300,
     }),
   } as unknown as ConfigService;
 
@@ -57,13 +66,22 @@ function build(overrides: Overrides = {}) {
     outboxEvent: {
       count: jest.fn().mockImplementation(() => Promise.resolve(counts[call++ % 2] ?? 0)),
     },
+    /* Entegrasyon turleri kiraci basina yurur; kiraci listesi bos oldugunda
+       hicbir kopru cagrisi yapilmaz ve bakim testleri agdan bagimsiz kalir. */
+    tenant: { findMany: jest.fn().mockResolvedValue(overrides.tenants ?? []) },
   } as unknown as PrismaService;
 
+  const integration = {
+    trigger: overrides.trigger ?? jest.fn().mockResolvedValue(null),
+    probe: overrides.probe ?? jest.fn().mockResolvedValue(null),
+  } as unknown as IntegrationService;
+
   return {
-    service: new MaintenanceService(config, lock, stock, idempotency, prisma),
+    service: new MaintenanceService(config, lock, stock, idempotency, prisma, integration),
     lock,
     stock,
     idempotency,
+    integration,
   };
 }
 

@@ -59,6 +59,17 @@ const envSchema = z
     /** Bu sureden uzun bekleyen outbox olayi uyari uretir. */
     OUTBOX_STALE_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
 
+    /**
+     * Senkron turlerinin sikligi. Stok en sik, fiyat en seyrek calisir:
+     * stok dakikalar icinde eskiyip yok-satmaya yol acar, fiyat listesi ise
+     * gunde birkac kez degisir ve her turda tum kartlari tarar.
+     */
+    JOB_STOCK_SYNC_SECONDS: z.coerce.number().int().min(30).max(3600).default(120),
+    JOB_PRICE_SYNC_SECONDS: z.coerce.number().int().min(60).max(86400).default(1800),
+    JOB_ACCOUNT_SYNC_SECONDS: z.coerce.number().int().min(60).max(86400).default(900),
+    JOB_ORDER_DISPATCH_SECONDS: z.coerce.number().int().min(10).max(600).default(30),
+    JOB_BRIDGE_PROBE_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
+
     LOGO_BRIDGE_BASE_URL: z.string().url().optional(),
     LOGO_BRIDGE_CLIENT_CERT_PATH: z.string().optional(),
     LOGO_BRIDGE_CLIENT_KEY_PATH: z.string().optional(),
