@@ -116,6 +116,11 @@ export type PriceDeltaPage = z.infer<typeof priceDeltaPageSchema>;
 export const accountDeltaItemSchema = z.object({
   /** Logo cari hesap kodu - portaldeki `Company.logoCode` ile eslesir. */
   logoCode: z.string(),
+  /**
+   * Logo fis referansi (LOGICALREF). Eslestirmenin ANAHTARIDIR: belge numarasi
+   * Logo'da donem icinde tekrar edebilir, referans etmez.
+   */
+  ficheRef: z.number().int(),
   documentNumber: z.string(),
   /** Logo fis turu: 1 satis faturasi, 3 iade, 31 tahsilat vb. */
   documentType: z.number().int(),
