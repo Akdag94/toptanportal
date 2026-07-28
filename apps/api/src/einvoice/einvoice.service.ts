@@ -228,6 +228,37 @@ export class EInvoiceService {
   }
 
   /**
+   * Toplu indirme: her belge icin ayri imzali baglanti uretir.
+   *
+   * TEK BIR ZIP URETILMEZ. Bes yuz belgeyi bellekte paketlemek, es zamanli iki
+   * talepte sunucuyu tuketir; ayrica paket yarida kesilirse kullanici hangi
+   * belgelerin indigini bilemez. Ayri baglantilar, tarayicinin indirme
+   * yoneticisine devredilebilir ve tek tek yeniden denenebilir.
+   *
+   * Kapsam denetimi HER belge icin ayri yapilir: listenin bir kimligi
+   * baskasina aitse yalnizca o belge dusurulur, istek tumden reddedilmez -
+   * ama dusurulen belge sessizce yok sayilmaz, sayisi donulur.
+   */
+  async createBulkLinks(
+    principal: AuthenticatedPrincipal,
+    documentIds: string[],
+    format: EDocumentFormat,
+  ): Promise<{ links: EDocumentLink[]; skippedCount: number }> {
+    const links: EDocumentLink[] = [];
+    let atlanan = 0;
+
+    for (const documentId of documentIds) {
+      try {
+        links.push(await this.createLink(principal, documentId, format));
+      } catch {
+        atlanan += 1;
+      }
+    }
+
+    return { links, skippedCount: atlanan };
+  }
+
+  /**
    * Imzali baglantiyi cozer. Sure dolmussa veya imza tutmuyorsa null doner;
    * cagiran taraf 403 dondurur ve HICBIR belge bilgisi sizdirmaz.
    */

@@ -10,11 +10,15 @@
  */
 
 import {
+  Body,
   Controller,
   Get,
   Header,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
+  Post,
   Query,
   Res,
   StreamableFile,
@@ -24,7 +28,9 @@ import type { Response } from 'express';
 import {
   EDocumentFormat,
   Permission,
+  eDocumentBulkSchema,
   eDocumentQuerySchema,
+  type EDocumentBulkRequest,
   type EDocumentLink,
   type EDocumentPage,
   type EDocumentQuery,
@@ -77,6 +83,18 @@ export class EInvoiceController {
     @Query('format') format?: EDocumentFormat,
   ): Promise<EDocumentLink> {
     return this.invoices.createLink(principal, documentId, format ?? EDocumentFormat.PDF);
+  }
+
+  @Post('bulk-links')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.INVOICE_DOWNLOAD)
+  @RateLimit({ limit: 10, windowSeconds: 600, scope: 'USER' })
+  @ApiOperation({ summary: 'Toplu indirme bağlantıları' })
+  bulkLinks(
+    @CurrentUser() principal: AuthenticatedPrincipal,
+    @Body(zodBody(eDocumentBulkSchema)) body: EDocumentBulkRequest,
+  ): Promise<{ links: EDocumentLink[]; skippedCount: number }> {
+    return this.invoices.createBulkLinks(principal, body.documentIds, body.format);
   }
 
   /**
