@@ -298,3 +298,32 @@ export const applyTemplateResultSchema = z.object({
 });
 
 export type ApplyTemplateResult = z.infer<typeof applyTemplateResultSchema>;
+
+// ---------------------------------------------------------------------------
+// Toplu siparis ice aktarimi
+// ---------------------------------------------------------------------------
+
+/**
+ * Excel'den kopyalanmis metin. Dosya yukleme yerine METIN gonderilir: tarayici
+ * CSV'yi zaten metin olarak okuyabilir ve coklu parcali (multipart) yukleme,
+ * arayuze de sunucuya da gereksiz bir katman ekler.
+ */
+export const bulkImportSchema = z.object({
+  content: z.string().min(1).max(200_000),
+  /** true ise mevcut sepet TEMIZLENIR; false ise uzerine eklenir. */
+  replaceExisting: z.boolean().default(false),
+});
+
+export type BulkImportRequest = z.infer<typeof bulkImportSchema>;
+
+export const bulkImportResultSchema = z.object({
+  cart: cartViewSchema,
+  importedCount: z.number().int(),
+  totalLines: z.number().int(),
+  /** Portalde bulunamayan stok kodlari - satir numarasiyla birlikte. */
+  unmatchedCodes: z.array(z.string()),
+  /** Okunamayan satirlar. */
+  invalidLines: z.array(z.string()),
+});
+
+export type BulkImportResult = z.infer<typeof bulkImportResultSchema>;

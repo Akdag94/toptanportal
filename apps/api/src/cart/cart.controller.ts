@@ -20,10 +20,13 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   Permission,
+  bulkImportSchema,
   canSeeFinancials,
   cartItemInputSchema,
   setCartItemQuantitySchema,
   setCartItemsSchema,
+  type BulkImportRequest,
+  type BulkImportResult,
   type CartItemInput,
   type CartView,
   type SetCartItemQuantityRequest,
@@ -34,13 +37,39 @@ import { CurrentUser, RequirePermissions } from '../common/decorators';
 import { zodBody } from '../common/pipes/zod-validation.pipe';
 import { requireCompanyContext } from '../common/context/company-context';
 import type { AuthenticatedPrincipal } from '../common/context/request-context';
+import { BulkImportService } from './bulk-import.service';
 import { CartService, type CartOwner } from './cart.service';
 
 @ApiTags('Sepet')
 @Controller('cart')
 @RequirePermissions(Permission.ORDER_DRAFT)
 export class CartController {
-  constructor(private readonly cart: CartService) {}
+  constructor(
+    private readonly cart: CartService,
+    private readonly bulk: BulkImportService,
+  ) {}
+
+  /**
+   * Excel'den kopyalanan listeyi sepete cevirir.
+   *
+   * Ayri bir yetki ister: toplu ice aktarim, tek bir yapistirma ile yuzlerce
+   * kalemlik siparis olusturabilir ve bu, siparis girisinden farkli bir risk
+   * seviyesidir.
+   */
+  @Post('bulk-import')
+  @RequirePermissions(Permission.ORDER_IMPORT_BULK)
+  @ApiOperation({ summary: 'Excel listesinden sepet oluştur' })
+  async bulkImport(
+    @CurrentUser() principal: AuthenticatedPrincipal,
+    @Body(zodBody(bulkImportSchema)) body: BulkImportRequest,
+  ): Promise<BulkImportResult> {
+    return this.bulk.import(
+      toOwner(principal),
+      principal.tenantId,
+      body.content,
+      body.replaceExisting,
+    );
+  }
 
   @Get()
   @ApiOperation({ summary: 'Sepeti getir' })
