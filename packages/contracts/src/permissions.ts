@@ -66,6 +66,14 @@ export const Permission = {
   PRICE_LIST_MANAGE: 'price-list:manage',
   AUDIT_LOG_VIEW: 'audit:view',
   IP_WHITELIST_MANAGE: 'ip-whitelist:manage',
+  /**
+   * Bildirim gonderim kaydini gorme.
+   *
+   * Kendi tercihlerini yonetmek yetki ISTEMEZ - herkes kendi tercihini
+   * degistirir. Bu yetki, "bu bayiye vade hatirlatmasi gitti mi" sorusunu
+   * cevaplayan kaydi acar ve o kayit baskalarinin adreslerini icerir.
+   */
+  NOTIFICATION_LOG_VIEW: 'notification:log:view',
 } as const;
 
 export type Permission = (typeof Permission)[keyof typeof Permission];
@@ -101,6 +109,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     Permission.PRICE_LIST_MANAGE,
     Permission.AUDIT_LOG_VIEW,
     Permission.IP_WHITELIST_MANAGE,
+    Permission.NOTIFICATION_LOG_VIEW,
   ],
 
   /**
