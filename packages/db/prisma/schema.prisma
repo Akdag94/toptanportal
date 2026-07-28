@@ -135,6 +135,8 @@ model Tenant {
   posTransactions  PosTransaction[]
   dbsBatches       DbsBatch[]
   eDocuments       EDocument[]
+  visitNotes       VisitNote[]
+  salesTargets     SalesTarget[]
 
   @@map("tenants")
 }
@@ -199,6 +201,7 @@ model Company {
   posTransactions  PosTransaction[]
   dbsRecords       DbsRecord[]
   eDocuments       EDocument[]
+  visitNotes       VisitNote[]
 
   @@unique([tenantId, logoCariCode])
   @@index([tenantId, isActive])
@@ -272,6 +275,8 @@ model User {
   posTransactions   PosTransaction[]    @relation("PosInitiatedBy")
   dbsBatches        DbsBatch[]          @relation("DbsCreatedBy")
   eDocumentAccess   EDocumentAccess[]
+  visitNotes        VisitNote[]         @relation("VisitNoteAuthor")
+  salesTargets      SalesTarget[]       @relation("SalesTargetOwner")
 
   @@unique([tenantId, emailNormalized])
   @@index([tenantId, role, status])
@@ -1700,4 +1705,81 @@ model EDocumentAccess {
   @@index([documentId, accessedAt])
   @@index([userId, accessedAt])
   @@map("e_document_access")
+}
+
+// ===========================================================================
+// Saha yonetimi - ziyaret ve hedef
+// ===========================================================================
+
+enum VisitOutcome {
+  ORDER_TAKEN
+  NO_ORDER
+  COMPLAINT
+  COLLECTION
+  INTRODUCTION
+}
+
+/// Plasiyerin bayi ziyareti.
+///
+/// Not SILINEMEZ, yalnizca eklenir. Bir sikayet kaydinin sonradan yok olmasi,
+/// musteri iliskisinin gecmisini yeniden yazmaktir; yanlis yazilan not
+/// duzeltme notuyla kapatilir.
+model VisitNote {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  companyId String  @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  authorUserId String @db.Uuid
+  author       User   @relation("VisitNoteAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  outcome VisitOutcome
+  note    String       @db.VarChar(1000)
+
+  /// Ziyaret konumu. Gozetim araci DEGILDIR: kaydedilir, dogrulanmaz.
+  latitude  Decimal? @db.Decimal(9, 6)
+  longitude Decimal? @db.Decimal(9, 6)
+
+  /// Bir sonraki ziyaret hatirlatmasi - gunun is listesi bundan uretilir.
+  followUpDate DateTime? @db.Date
+
+  visitedAt DateTime @default(now()) @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([companyId, visitedAt])
+  @@index([authorUserId, visitedAt])
+  @@index([tenantId, followUpDate])
+  @@map("visit_notes")
+}
+
+/// Plasiyerin donemlik satis hedefi ve prim orani.
+///
+/// Gerceklesen ciro burada TUTULMAZ, her okumada siparislerden hesaplanir:
+/// onbelleklenen bir ciro, iptal edilen bir siparisten sonra sessizce yanlis
+/// kalir ve prim yanlis odenir.
+model SalesTarget {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  salesRepUserId String @db.Uuid
+  salesRep       User   @relation("SalesTargetOwner", fields: [salesRepUserId], references: [id], onDelete: Cascade)
+
+  /// YYYY-AA
+  period String @db.VarChar(7)
+
+  targetAmount Decimal @db.Decimal(18, 4)
+  /// Prim orani (yuzde). Hedefin altinda kalindiysa prim hesaplanmaz.
+  commissionRate Decimal @default(0) @db.Decimal(5, 2)
+  currency       String  @default("TRY") @db.VarChar(3)
+
+  updatedByUserId String?  @db.Uuid
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([salesRepUserId, period])
+  @@index([tenantId, period])
+  @@map("sales_targets")
 }
