@@ -80,6 +80,26 @@ export class OutboxService {
   }
 
   /**
+   * Tekrar denenmesi ANLAMSIZ olan hata. Deneme hakki tuketilmeden dogrudan
+   * olu isaretlenir.
+   *
+   * Ornek: Logo'da bulunmayan bir stok karti. On iki kez denemek ayni yaniti
+   * alir, kuyrugu tikar ve gercek gecici hatalarin sirasini geciktirir.
+   * Operator eksigi tamamlayip olayi elle yeniden kuyruga alir.
+   */
+  async markDead(id: bigint, error: string): Promise<void> {
+    await this.prisma.outboxEvent.update({
+      where: { id },
+      data: {
+        status: OutboxStatus.DEAD,
+        lastError: error.slice(0, 1000),
+        lockedBy: null,
+        lockedAt: null,
+      },
+    });
+  }
+
+  /**
    * Basarisiz gonderim. Ustel geri cekilme (exponential backoff) uygulanir;
    * azami deneme asilirsa olay DEAD isaretlenir ve manuel mudahale bekler -
    * sessizce kaybolmaz.
