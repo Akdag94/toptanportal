@@ -70,6 +70,21 @@ const envSchema = z
     JOB_ORDER_DISPATCH_SECONDS: z.coerce.number().int().min(10).max(600).default(30),
     JOB_BRIDGE_PROBE_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
 
+    /**
+     * Sanal POS. Hicbiri tanimli degilse kart ile odeme KAPALIDIR ve arayuz
+     * dugmeyi hic gostermez - yarim yapilandirilmis bir POS, kullaniciyi
+     * bankaya gonderip hata sayfasinda birakir.
+     */
+    POS_PROVIDER: z.enum(['nestpay']).optional(),
+    POS_MERCHANT_ID: z.string().optional(),
+    POS_TERMINAL_ID: z.string().optional(),
+    /** Magaza anahtari. Ozet hesabinda kullanilir, hicbir yanitta gonderilmez. */
+    POS_STORE_KEY: z.string().optional(),
+    POS_GATEWAY_URL: z.string().url().optional(),
+    /** Bankanin geri donecegi adres. API'nin DIS adresi olmalidir. */
+    POS_CALLBACK_URL: z.string().url().optional(),
+    POS_MAX_INSTALLMENT: z.coerce.number().int().min(1).max(12).default(6),
+
     LOGO_BRIDGE_BASE_URL: z.string().url().optional(),
     LOGO_BRIDGE_CLIENT_CERT_PATH: z.string().optional(),
     LOGO_BRIDGE_CLIENT_KEY_PATH: z.string().optional(),
@@ -174,6 +189,28 @@ export function loadConfiguration(): AppConfig {
 
   if (blindIndexKey.length < 32) {
     throw new Error('BLIND_INDEX_KEY en az 32 bayt (base64) olmalıdır.');
+  }
+
+  /* POS ya TAMAMEN yapilandirilir ya da hic yapilandirilmaz. Yarim
+     yapilandirma, calisiyor sanilan ama her odemede basarisiz olan bir akis
+     uretir ve bunu ilk fark eden musteri olur. */
+  const posFields = [
+    env.POS_PROVIDER,
+    env.POS_MERCHANT_ID,
+    env.POS_STORE_KEY,
+    env.POS_GATEWAY_URL,
+    env.POS_CALLBACK_URL,
+  ];
+
+  if (posFields.some((value) => value !== undefined) && posFields.some((value) => value === undefined)) {
+    throw new Error(
+      'Sanal POS yapılandırması eksik. POS_PROVIDER, POS_MERCHANT_ID, POS_STORE_KEY, ' +
+        'POS_GATEWAY_URL ve POS_CALLBACK_URL ya birlikte tanımlanmalı ya da hiçbiri tanımlanmamalıdır.',
+    );
+  }
+
+  if (isProduction && env.POS_CALLBACK_URL?.startsWith('http://')) {
+    throw new Error('POS_CALLBACK_URL üretim ortamında HTTPS olmalıdır.');
   }
 
   if (isProduction && env.LOGO_BRIDGE_BASE_URL === undefined) {
