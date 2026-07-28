@@ -132,6 +132,8 @@ model Tenant {
   payments         Payment[]
   syncCursors      SyncCursor[]
   bridgeChecks     BridgeHealthCheck[]
+  posTransactions  PosTransaction[]
+  dbsBatches       DbsBatch[]
 
   @@map("tenants")
 }
@@ -193,6 +195,8 @@ model Company {
   discountRules    DiscountRule[]
   accountEntries   AccountEntry[]
   payments         Payment[]
+  posTransactions  PosTransaction[]
+  dbsRecords       DbsRecord[]
 
   @@unique([tenantId, logoCariCode])
   @@index([tenantId, isActive])
@@ -263,6 +267,8 @@ model User {
   approvedOrders    Order[]             @relation("OrderApprovedBy")
   orderTemplates    OrderTemplate[]
   recordedPayments  Payment[]           @relation("PaymentRecordedBy")
+  posTransactions   PosTransaction[]    @relation("PosInitiatedBy")
+  dbsBatches        DbsBatch[]          @relation("DbsCreatedBy")
 
   @@unique([tenantId, emailNormalized])
   @@index([tenantId, role, status])
@@ -1273,6 +1279,7 @@ model AccountEntry {
 
   payment     Payment?
   allocations PaymentAllocation[]
+  dbsRecords  DbsRecord[]
 
   @@unique([tenantId, logoFicheRef])
   @@index([companyId, entryDate])
@@ -1319,7 +1326,9 @@ model Payment {
   createdAt   DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
 
-  allocations PaymentAllocation[]
+  allocations    PaymentAllocation[]
+  posTransaction PosTransaction?
+  dbsRecords     DbsRecord[]
 
   @@index([companyId, receivedAt])
   @@index([tenantId, status, receivedAt])
@@ -1421,4 +1430,147 @@ model BridgeHealthCheck {
 
   @@index([tenantId, checkedAt])
   @@map("bridge_health_checks")
+}
+
+// ===========================================================================
+// Sanal POS (3D Secure) ve DBS
+// ===========================================================================
+
+enum PosTransactionStatus {
+  INITIATED
+  SUCCEEDED
+  FAILED
+  NEEDS_REVIEW
+}
+
+/// 3D Secure odeme girisimi.
+///
+/// KART VERISI BU TABLODA YOKTUR. Yalnizca maskeli kart (ilk 6 - son 4) ve
+/// bankanin islem kimligi tutulur. Tam kart numarasi, son kullanma tarihi ve
+/// CVV portale HIC ulasmaz; kullanici bankanin sayfasinda girer.
+///
+/// Tutar `amount` alanindan okunur - bankanin geri gonderdigi tutardan DEGIL.
+/// Geri donuste gelen parametreler istemciden gecer ve degistirilebilir; tutari
+/// oradan okumak, 1 TL odeyip 10.000 TL kapatmanin yoludur.
+model PosTransaction {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  companyId String  @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  initiatedByUserId String @db.Uuid
+  initiatedBy       User   @relation("PosInitiatedBy", fields: [initiatedByUserId], references: [id], onDelete: Restrict)
+
+  status      PosTransactionStatus @default(INITIATED)
+  amount      Decimal              @db.Decimal(18, 4)
+  currency    String               @default("TRY") @db.VarChar(3)
+  installment Int                  @default(1)
+
+  /// Bankaya gonderilen siparis kimligi. Banka geri donuste bunu tasir ve
+  /// islemi bu deger uzerinden buluruz.
+  merchantOrderId String @db.VarChar(64)
+
+  /// Banka islem kimligi - itiraz ve mutabakatta bankaya bu verilir.
+  providerRef  String? @db.VarChar(64)
+  providerCode String? @db.VarChar(32)
+  /// 3D dogrulama sonucu (mdStatus vb.) - kanit olarak saklanir.
+  authCode     String? @db.VarChar(32)
+
+  maskedPan String? @db.VarChar(24)
+  cardBrand String? @db.VarChar(24)
+  bankName  String? @db.VarChar(80)
+
+  errorCode    String? @db.VarChar(32)
+  errorMessage String? @db.VarChar(500)
+
+  /// Basarili islemde olusan tahsilat kaydi. Tek yonlu 1-1.
+  paymentId String?  @unique @db.Uuid
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  /// Dagitim talebi islem basariyla tamamlaninca uygulanir.
+  /// Bicim: [{ entryId, amount }]
+  requestedAllocations Json @default("[]")
+
+  completedAt DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([tenantId, merchantOrderId])
+  @@index([companyId, createdAt])
+  @@index([tenantId, status, createdAt])
+  @@map("pos_transactions")
+}
+
+enum DbsFileKind {
+  DEBT
+  RESULT
+}
+
+enum DbsRecordStatus {
+  PENDING
+  COLLECTED
+  REJECTED
+}
+
+/// Bankaya gonderilen borc dosyasi veya bankadan donen sonuc dosyasi.
+model DbsBatch {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  bankCode String      @db.VarChar(8)
+  kind     DbsFileKind
+  fileName String      @db.VarChar(160)
+
+  recordCount Int     @default(0)
+  totalAmount Decimal @default(0) @db.Decimal(18, 4)
+  currency    String  @default("TRY") @db.VarChar(3)
+
+  createdByUserId String @db.Uuid
+  createdBy       User   @relation("DbsCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  processedAt DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+
+  records DbsRecord[]
+
+  @@index([tenantId, createdAt])
+  @@map("dbs_batches")
+}
+
+/// Dosyadaki tek bir borc kaydi.
+///
+/// Ayni belge iki farkli dosyaya GIREMEZ: benzersiz kisit bunu garanti eder.
+/// Ayni faturayi iki kez bankaya bildirmek, bayiden iki kez tahsilat demektir
+/// ve geri donusu, portalin duzeltebilecegi bir sey degildir.
+model DbsRecord {
+  id      String   @id @default(uuid()) @db.Uuid
+  batchId String   @db.Uuid
+  batch   DbsBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  companyId String  @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  entryId String       @db.Uuid
+  entry   AccountEntry @relation(fields: [entryId], references: [id], onDelete: Restrict)
+
+  amount   Decimal         @db.Decimal(18, 4)
+  dueDate  DateTime        @db.Date
+  status   DbsRecordStatus @default(PENDING)
+
+  rejectReason String? @db.VarChar(280)
+  collectedAt  DateTime? @db.Timestamptz(6)
+
+  /// Tahsil edildiginde olusan tahsilat kaydi.
+  paymentId String?  @db.Uuid
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([entryId, batchId])
+  @@index([companyId, status])
+  @@index([batchId, status])
+  @@map("dbs_records")
 }
