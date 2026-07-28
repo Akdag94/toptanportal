@@ -43,6 +43,9 @@ export const ErrorCode = {
   OVERDUE_INVOICE_BLOCK: 'OVERDUE_INVOICE_BLOCK',
   SPENDING_LIMIT_EXCEEDED: 'SPENDING_LIMIT_EXCEEDED',
   ORDER_ALREADY_PROCESSED: 'ORDER_ALREADY_PROCESSED',
+  PAYMENT_DECLINED: 'PAYMENT_DECLINED',
+  PAYMENT_ALREADY_COMPLETED: 'PAYMENT_ALREADY_COMPLETED',
+  POS_NOT_CONFIGURED: 'POS_NOT_CONFIGURED',
 
   // Sistem
   RATE_LIMITED: 'RATE_LIMITED',
@@ -111,6 +114,9 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
     'Vadesi geçmiş borcunuz bulunmaktadır. Lütfen kredi kartı ile ödeme yapın veya bakiyenizi kapatın.',
   SPENDING_LIMIT_EXCEEDED: 'Sipariş tutarı tanımlı limitinizi aşıyor. Onaya gönderildi.',
   ORDER_ALREADY_PROCESSED: 'Bu sipariş daha önce işleme alınmış.',
+  PAYMENT_DECLINED: 'Ödeme bankanız tarafından onaylanmadı.',
+  PAYMENT_ALREADY_COMPLETED: 'Bu ödeme daha önce tamamlanmış.',
+  POS_NOT_CONFIGURED: 'Kart ile ödeme şu anda kullanılamıyor.',
   RATE_LIMITED: 'Çok fazla istek gönderdiniz. Lütfen kısa bir süre sonra tekrar deneyin.',
   LOGO_UNAVAILABLE:
     'Muhasebe sistemine şu anda ulaşılamıyor. Siparişiniz kuyruğa alındı, bağlantı sağlandığında otomatik iletilecektir.',
