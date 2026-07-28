@@ -117,6 +117,17 @@ hash(n) = SHA256( hash(n-1) || "." || kanonikJSON(kayıt(n)) )
 - **Dağıtım varsayılan olarak FIFO'dur:** vadesi en eski açık belgeden başlanır, dağıtılamayan kısım avans olarak kalır.
 - Ekstre `Excel (CSV) İndir` düğmesiyle dışa aktarılır. Dosya **noktalı virgülle** ayrılır ve **BOM** ile başlar (Türkçe Excel virgülü ondalık ayracı sayar, BOM'suz UTF-8'i yerel kod sayfasıyla okur); `=`, `+`, `-`, `@` ile başlayan hücreler formül enjeksiyonuna karşı etkisizleştirilir. Kurallar `apps/web/src/lib/ekstre-csv.spec.ts` ile kilitlenmiştir.
 
+### e-Fatura / e-İrsaliye arşivi
+
+**PDF asıl belge değildir.** Hukuki asıl, UBL-TR 1.2 biçimindeki imzalı XML'dir; PDF ondan türetilmiş görüntüleme kopyasıdır. İhtilafta mahkemeye XML sunulur, bu yüzden arşiv XML üzerine kurulur ve ikisi çelişirse doğru olan XML'dir.
+
+- **Belgeler veritabanında değil, nesne deposunda durur.** Tabloda yalnızca yol ve SHA-256 özeti vardır — 10 yıllık XML'i veritabanında taşımak felaket kurtarmayı saatlerden günlere çıkarır.
+- **Silme yoktur** (VUK 253: 10 yıl saklama). Silme ve tutar değişikliği **veritabanı tetikleyicisiyle** engellenir; uygulama katmanındaki bir kontrol, yeni bir sorguyla veya doğrudan bağlanan bir araçla atlanabilir. Yalnızca *durum* ilerleyebilir — tutar düzeltmesi iade faturasıyla yapılır.
+- **`ACCEPTED` ile `DELIVERED` ayrıdır.** e-Fatura'da alıcının reddetme hakkı vardır; ikisini tek duruma indirmek reddedilmiş bir faturayı tahsil edilebilir göstermek olur.
+- **İndirme iki adımlıdır:** oturumlu istek kısa ömürlü *imzalı* bağlantı alır, tarayıcı o bağlantıya gider. Bağlantı indiren kişiyi içinde taşır; erişim kaydı bu sayede oturumsuz uçtan da yazılır ve `e_document_access` tablosu append-only'dir.
+- **Belge yolu her okumada köke göre çözülür**; dışarı taşan istek reddedilir (`apps/api/src/einvoice/document-storage.service.spec.ts`).
+- Toplu indirmede tek bir zip üretilmez — 500 belgeyi bellekte paketlemek eş zamanlı iki talepte sunucuyu tüketir; ayrı bağlantılar tarayıcının indirme yöneticisine devredilir.
+
 ### Sanal POS (3D Secure) ve DBS
 
 **Kart verisi portale hiç ulaşmaz.** Kullanıcı bankanın 3D sayfasına yönlendirilir ve kartını oraya girer; portalin gördüğü tek şey bankanın döndüğü sonuç ve maskeli karttır (`454671******7894`). Kart verisi sunucudan bir kez geçerse o sunucu logları, yedekleri ve bellek dökümleriyle birlikte PCI-DSS kapsamına girer — kapsam dışında kalmanın tek güvenilir yolu veriyi hiç görmemektir.
@@ -182,11 +193,11 @@ Tasarım ilkeleri: birincil eylemler ekranın alt şeridinde sabit durur (bir el
 ## Sıradaki modüller
 
 1. **On-prem köprü servisi (.NET 8)** — Logo Object Service ve MSSQL erişimi, mTLS sunucusu
-2. **e-Fatura / e-İrsaliye arşivi** — 10 yıllık evrak erişimi, toplu indirme
+2. **e-Belge üretim hattı** — entegratör bağlantısı, UBL-TR üretimi, GİB durum takibi (arşiv ve sunum tarafı hazır)
 3. **iOS 10 saniye akışı** — barkod tarama, çevrimdışı depo modu, saha tahsilatı
 4. **Bayi ve plasiyer yönetimi** — portföy atama, ziyaret notları, hedef ve prim
 
-Tamamlananlar: stok rezervasyonu ve sipariş motoru, matris fiyat ve kademeli iskonto, cari hesap / ekstre / yaşlandırma, tahsilat kaydı, sipariş risk kalkanı, Logo entegrasyonunun bulut tarafı, 3D Secure sanal POS ve DBS.
+Tamamlananlar: stok rezervasyonu ve sipariş motoru, matris fiyat ve kademeli iskonto, cari hesap / ekstre / yaşlandırma, tahsilat kaydı, sipariş risk kalkanı, Logo entegrasyonunun bulut tarafı, 3D Secure sanal POS, DBS ve e-Belge arşivi.
 
 Temel altyapı (`OutboxEvent`, `IdempotencyKey`, denetim zinciri) bu modüller için şemada hazırdır.
 
