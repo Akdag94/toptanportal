@@ -28,6 +28,11 @@ import type {
   DbsBatchView,
   DbsImportResult,
   DeadEventView,
+  EDocumentFormat,
+  EDocumentLink,
+  EDocumentPage,
+  EDocumentQuery,
+  EDocumentSummary,
   ErrorCode,
   IntegrationStatus,
   LoginResponse,
@@ -549,6 +554,25 @@ export const dbsApi = {
       method: 'POST',
       body: { bankCode, fileName, content },
     }),
+};
+
+// ---------------------------------------------------------------------------
+// e-Belge arsivi
+// ---------------------------------------------------------------------------
+
+export const eDocumentApi = {
+  list: (query: Partial<EDocumentQuery> = {}) =>
+    request<EDocumentPage>(`/e-documents${toQuery({ ...query })}`),
+
+  summary: (query: Partial<EDocumentQuery> = {}) =>
+    request<EDocumentSummary>(`/e-documents/summary${toQuery({ ...query })}`),
+
+  /**
+   * Indirme baglantisi uretir. Baglanti kisa omurludur ve indiren kisiyi
+   * icinde tasir; bu yuzden ONCE uretilir, sonra tarayici ona gider.
+   */
+  link: (documentId: string, format: EDocumentFormat) =>
+    request<EDocumentLink>(`/e-documents/${documentId}/link${toQuery({ format })}`),
 };
 
 export { emitSessionChange };
