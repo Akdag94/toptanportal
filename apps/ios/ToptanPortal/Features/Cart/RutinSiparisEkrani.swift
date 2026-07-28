@@ -63,11 +63,11 @@ struct RutinSiparisEkrani: View {
     var body: some View {
         VStack(spacing: 0) {
             if let hata = model.hata {
-                UyariSeridi(metin: hata, tur: .hata)
+                UyariSeridi(tur: .hata, mesaj: hata)
             }
 
             if let sonuc = model.sonuc {
-                UyariSeridi(metin: sonuc, tur: model.atlananlar.isEmpty ? .basari : .dikkat)
+                UyariSeridi(tur: model.atlananlar.isEmpty ? .basari : .dikkat, mesaj: sonuc)
             }
 
             if !model.atlananlar.isEmpty {

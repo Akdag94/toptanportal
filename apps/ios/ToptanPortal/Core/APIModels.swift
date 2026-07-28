@@ -41,6 +41,10 @@ struct Permission: RawRepresentable, Codable, Hashable, Sendable {
     static let orderApprove = Permission(rawValue: "order:approve")
     static let orderTemplateManage = Permission(rawValue: "order-template:manage")
     static let masquerade = Permission(rawValue: "session:masquerade")
+    static let visitNoteManage = Permission(rawValue: "visit-note:manage")
+    static let collectionRecord = Permission(rawValue: "collection:record")
+    static let companyViewAssigned = Permission(rawValue: "company:view:assigned")
+    static let salesTargetViewOwn = Permission(rawValue: "sales-target:view:own")
 }
 
 // MARK: - Oturum

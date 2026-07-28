@@ -103,11 +103,11 @@ struct KatalogEkrani: View {
             aramaCubugu
 
             if let hata = model.hata {
-                UyariSeridi(metin: hata, tur: .hata)
+                UyariSeridi(tur: .hata, mesaj: hata)
             }
 
             if let bildirim = model.sepeteEklendi {
-                UyariSeridi(metin: bildirim, tur: .basari)
+                UyariSeridi(tur: .basari, mesaj: bildirim)
             }
 
             List {
@@ -336,30 +336,6 @@ private struct HizliEklemeKutusu: View {
             }
         }
         .presentationDetents([.medium])
-    }
-}
-
-struct UyariSeridi: View {
-    enum Tur { case hata, basari, dikkat }
-
-    let metin: String
-    let tur: Tur
-
-    var body: some View {
-        Text(metin)
-            .font(.subheadline)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(renk.opacity(0.15))
-            .foregroundStyle(renk)
-    }
-
-    private var renk: Color {
-        switch tur {
-        case .hata: .red
-        case .basari: .green
-        case .dikkat: .orange
-        }
     }
 }
 

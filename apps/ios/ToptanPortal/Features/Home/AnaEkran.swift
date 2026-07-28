@@ -16,13 +16,21 @@ struct AnaEkran: View {
                 .tabItem { Label("Sipariş", systemImage: "cart.fill") }
 
             if kullanici.has(.catalogView) {
-                KatalogSekmesi(kullanici: kullanici)
-                    .tabItem { Label("Katalog", systemImage: "square.grid.2x2.fill") }
+                NavigationStack { KatalogEkrani() }
+                    .tabItem { Label("Katalog", systemImage: "barcode.viewfinder") }
             }
 
-            if kullanici.has(.balanceView) {
-                CariSekmesi()
-                    .tabItem { Label("Cari Hesap", systemImage: "doc.text.fill") }
+            if kullanici.has(.orderDraft) {
+                NavigationStack { SepetEkrani() }
+                    .tabItem { Label("Sepet", systemImage: "basket.fill") }
+            }
+
+            /* Saha sekmesi yalnizca plasiyerde: bayi listesi, saha tahsilati
+               ve ziyaret notu tek ekranda toplanir - plasiyer bayinin kapisinda
+               ucunu de arka arkaya yapar. */
+            if kullanici.has(.visitNoteManage) || kullanici.has(.collectionRecord) {
+                NavigationStack { SahaEkrani() }
+                    .tabItem { Label("Saha", systemImage: "map.fill") }
             }
 
             HesapSekmesi(kullanici: kullanici)
@@ -54,15 +62,27 @@ private struct SiparisSekmesi: View {
                         )
                     }
 
-                    Text("Rutin Siparişlerim")
-                        .font(.title3.weight(.semibold))
+                    NavigationLink {
+                        RutinSiparisEkrani()
+                    } label: {
+                        HizliErisimKarti(
+                            baslik: "Rutin Siparişim",
+                            aciklama: "Kayıtlı şablonunuza dokunun, tüm liste tek seferde sepete gitsin.",
+                            simge: "clock.arrow.circlepath"
+                        )
+                    }
 
-                    Text(
-                        "Kayıtlı şablonlarınız burada listelenir. Şablona dokunduğunuzda güncel stok ve limit kontrolü yapılarak tüm liste sepete aktarılır."
-                    )
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    if kullanici.has(.catalogView) {
+                        NavigationLink {
+                            KatalogEkrani()
+                        } label: {
+                            HizliErisimKarti(
+                                baslik: "Barkod ile Ekle",
+                                aciklama: "Ürünün barkodunu okutun, miktarı girin, sepete eklensin.",
+                                simge: "barcode.viewfinder"
+                            )
+                        }
+                    }
                 }
                 .padding(Tema.kenarBosluk)
             }
@@ -72,49 +92,36 @@ private struct SiparisSekmesi: View {
     }
 }
 
-// MARK: - Katalog
-
-private struct KatalogSekmesi: View {
-    let kullanici: SessionUser
+/// Ana ekrandaki buyuk dokunma hedefi.
+///
+/// 56 pt yukseklik ve tam genislik: kullanici ayakta, tek elle ve genellikle
+/// acele halinde. Kucuk bir baglanti burada her seferinde kacirilir.
+private struct HizliErisimKarti: View {
+    let baslik: String
+    let aciklama: String
+    let simge: String
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Tema.ogeBosluk) {
-                    Text(
-                        kullanici.blindOrderMode
-                            ? "Ürün adı, birimi ve stok durumu gösterilir."
-                            : "Ürün adı, birimi, stok durumu ve size özel fiyatlar gösterilir."
-                    )
-                    .font(.subheadline)
+        HStack(spacing: 14) {
+            Image(systemName: simge)
+                .font(.title2)
+                .frame(width: 44)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(baslik).font(.headline)
+                Text(aciklama)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(Tema.kenarBosluk)
             }
-            .navigationTitle("Katalog")
-            .background(Color(.systemGroupedBackground))
-        }
-    }
-}
 
-// MARK: - Cari
+            Spacer()
 
-private struct CariSekmesi: View {
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Tema.ogeBosluk) {
-                    Text("Bakiye, vade tarihleri ve e-Fatura evraklarınız muhasebe sisteminden anlık olarak getirilir.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(Tema.kenarBosluk)
-            }
-            .navigationTitle("Cari Hesap")
-            .background(Color(.systemGroupedBackground))
+            Image(systemName: "chevron.right").foregroundStyle(.tertiary)
         }
+        .padding(16)
+        .frame(minHeight: 56)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
     }
 }
 

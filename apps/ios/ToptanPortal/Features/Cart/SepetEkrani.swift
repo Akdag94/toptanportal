@@ -91,18 +91,15 @@ struct SepetEkrani: View {
     var body: some View {
         VStack(spacing: 0) {
             if bekleyenSayisi > 0 {
-                UyariSeridi(
-                    metin: "\(bekleyenSayisi) işlem gönderilmeyi bekliyor. Bağlantı gelince otomatik gönderilecek.",
-                    tur: .dikkat
-                )
+                UyariSeridi(tur: .dikkat, mesaj: "\(bekleyenSayisi) işlem gönderilmeyi bekliyor. Bağlantı gelince otomatik gönderilecek.")
             }
 
             if let hata = model.hata {
-                UyariSeridi(metin: hata, tur: .hata)
+                UyariSeridi(tur: .hata, mesaj: hata)
             }
 
             if let sonuc = model.gonderimSonucu {
-                UyariSeridi(metin: sonuc, tur: .basari)
+                UyariSeridi(tur: .basari, mesaj: sonuc)
             }
 
             if let sepet = model.sepet, !sepet.lines.isEmpty {

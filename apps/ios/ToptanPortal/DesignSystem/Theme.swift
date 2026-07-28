@@ -85,13 +85,14 @@ struct AlanKutusu<Icerik: View>: View {
 
 struct UyariSeridi: View {
     enum Tur {
-        case hata, bilgi, dikkat
+        case hata, bilgi, dikkat, basari
 
         var renk: Color {
             switch self {
             case .hata: .red
             case .bilgi: .accentColor
             case .dikkat: .orange
+            case .basari: .green
             }
         }
 
@@ -100,6 +101,7 @@ struct UyariSeridi: View {
             case .hata: "exclamationmark.triangle.fill"
             case .bilgi: "info.circle.fill"
             case .dikkat: "eye.slash.fill"
+            case .basari: "checkmark.circle.fill"
             }
         }
     }
