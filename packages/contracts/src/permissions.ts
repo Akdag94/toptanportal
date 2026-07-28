@@ -51,6 +51,14 @@ export const Permission = {
   VISIT_NOTE_MANAGE: 'visit-note:manage',
   COLLECTION_RECORD: 'collection:record',
   SALES_TARGET_VIEW_OWN: 'sales-target:view:own',
+  /**
+   * Hedef tanimlama ve TUM plasiyerlerin hedefini gorme.
+   *
+   * Gorme ve tanimlama tek yetkide birlesir cunku ikisi de ayni bilgiye
+   * dayanir: baskasinin hedefini ve primini gormek, ekip icinde ucret
+   * bilgisinin sizmasi demektir ve bu ayrimi yalnizca yonetici tasiyabilir.
+   */
+  SALES_TARGET_MANAGE: 'sales-target:manage',
 
   // --- Yonetim / sistem ---
   ADMIN_SETTINGS_MANAGE: 'admin:settings:manage',
@@ -87,6 +95,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     Permission.USER_LIMIT_MANAGE,
     Permission.COMPANY_VIEW_ALL,
     Permission.COMPANY_MANAGE,
+    Permission.SALES_TARGET_MANAGE,
     Permission.ADMIN_SETTINGS_MANAGE,
     Permission.INTEGRATION_MANAGE,
     Permission.PRICE_LIST_MANAGE,
