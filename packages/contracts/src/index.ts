@@ -8,4 +8,5 @@ export * from './order.schema';
 export * from './finance.schema';
 export * from './integration.schema';
 export * from './pos.schema';
+export * from './einvoice.schema';
 export * from './errors';
