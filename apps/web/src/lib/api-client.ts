@@ -55,6 +55,9 @@ import type {
   PaymentView,
   PlaceOrderRequest,
   PlaceOrderResult,
+  PriceListItemPage,
+  PriceListItemQuery,
+  PriceListView,
   PosTransactionView,
   RecordPaymentRequest,
   SessionUser,
@@ -661,6 +664,17 @@ export const userApi = {
 
   setSpendingLimit: (userId: string, body: SetSpendingLimitRequest) =>
     request<ManagedUser>(`/users/${userId}/spending-limit`, { method: 'POST', body }),
+};
+
+// ---------------------------------------------------------------------------
+// Fiyat listeleri (salt okunur - fiyatlar Logo'dan gelir)
+// ---------------------------------------------------------------------------
+
+export const priceListApi = {
+  list: () => request<PriceListView[]>('/price-lists'),
+
+  items: (query: PriceListItemQuery) =>
+    request<PriceListItemPage>(`/price-lists/items${toQuery({ ...query })}`),
 };
 
 export { emitSessionChange };

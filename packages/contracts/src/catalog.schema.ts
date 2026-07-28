@@ -79,3 +79,62 @@ export const barcodeLookupSchema = z.object({
 });
 
 export type BarcodeLookupRequest = z.infer<typeof barcodeLookupSchema>;
+
+// ---------------------------------------------------------------------------
+// Fiyat listeleri (salt okunur)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fiyat listeleri Logo'dan senkronlanir; portal onlari DEGISTIRMEZ.
+ *
+ * Bu yuzden sozlesmede yazma islemi yoktur: fiyati portalden degistirmek, iki
+ * sistem arasinda hangisinin dogru oldugu belirsiz bir alan yaratir ve bir
+ * sonraki senkron o degisikligi sessizce geri alir.
+ */
+export const priceListViewSchema = z.object({
+  id: z.string().uuid(),
+  logoPriceListNo: z.number().int(),
+  name: z.string(),
+  currency: z.string(),
+  vatIncluded: z.boolean(),
+  isDefault: z.boolean(),
+  isActive: z.boolean(),
+  itemCount: z.number().int(),
+  /** Bu listeye bagli bayi sayisi - listenin ticari agirligini gosterir. */
+  companyCount: z.number().int(),
+  lastSyncedAt: z.string().nullable(),
+});
+
+export type PriceListView = z.infer<typeof priceListViewSchema>;
+
+export const priceListItemViewSchema = z.object({
+  id: z.string().uuid(),
+  productId: z.string().uuid(),
+  productCode: z.string(),
+  productName: z.string(),
+  unitCode: z.string().nullable(),
+  price: z.number(),
+  minQuantity: z.number(),
+  validFrom: z.string().nullable(),
+  validTo: z.string().nullable(),
+  lastSyncedAt: z.string().nullable(),
+});
+
+export type PriceListItemView = z.infer<typeof priceListItemViewSchema>;
+
+export const priceListItemQuerySchema = z.object({
+  priceListId: z.string().uuid(),
+  q: z.string().trim().max(80).optional(),
+  offset: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+export type PriceListItemQuery = z.infer<typeof priceListItemQuerySchema>;
+
+export const priceListItemPageSchema = z.object({
+  items: z.array(priceListItemViewSchema),
+  totalCount: z.number().int(),
+  hasMore: z.boolean(),
+});
+
+export type PriceListItemPage = z.infer<typeof priceListItemPageSchema>;
