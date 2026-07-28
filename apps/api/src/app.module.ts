@@ -35,6 +35,7 @@ import { CartModule } from './cart/cart.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { FinanceModule } from './finance/finance.module';
 import { HealthModule } from './health/health.module';
+import { IntegrationModule } from './integration/integration.module';
 import { MaintenanceModule } from './maintenance/maintenance.module';
 import { OrdersModule } from './orders/orders.module';
 import { PricingModule } from './pricing/pricing.module';
@@ -62,6 +63,7 @@ import { StockModule } from './stock/stock.module';
     CartModule,
     OrdersModule,
     FinanceModule,
+    IntegrationModule,
     MaintenanceModule,
   ],
   providers: [
