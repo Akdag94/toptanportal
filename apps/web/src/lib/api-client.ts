@@ -23,6 +23,7 @@ import type {
   CartItemInput,
   CartView,
   AssignRepRequest,
+  BulkImportResult,
   CardPaymentForm,
   CatalogPage,
   CompanyListQuery,
@@ -413,6 +414,17 @@ export const cartApi = {
     request<CartView>(`/cart/items/${productId}/${unitId}`, { method: 'DELETE' }),
 
   clear: () => request<CartView>('/cart', { method: 'DELETE' }),
+
+  /**
+   * Excel listesini sepete cevirir. Dosya TARAYICIDA metne cevrilip
+   * gonderilir; coklu parcali yukleme hem arayuze hem sunucuya gereksiz bir
+   * katman ekler ve CSV zaten metindir.
+   */
+  bulkImport: (content: string, replaceExisting: boolean) =>
+    request<BulkImportResult>('/cart/bulk-import', {
+      method: 'POST',
+      body: { content, replaceExisting },
+    }),
 };
 
 export const orderApi = {
