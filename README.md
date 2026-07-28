@@ -173,6 +173,22 @@ Ekran `/panel/fiyat-listeleri` (`PRICE_LIST_MANAGE`) **salt okunurdur; düzenlem
 
 **DBS:** vadesi gelen açık belgeler borç dosyası olarak bankaya verilir, banka sonuç dosyası döner. Tutarlar **kuruş** olarak yazılır — ondalık ayracı bankadan bankaya değişir ve yanlış yorumlanan bir ayraç 1.234,56 TL'yi 123.456 TL yapar. Aynı belge açık bir DBS kaydında yalnızca bir kez bulunabilir (kısmi benzersiz indeks): aynı faturayı iki dosyaya koymak bayiden iki kez tahsilat demektir ve geri dönüşü portalin düzeltebileceği bir şey değildir.
 
+### Bildirim (e-posta ve mobil)
+
+Bildirim teknik bir ayrıntı değil **ticari bir sözdür**: "siparişiniz onaylandı" mesajı gitmezse bayi telefona sarılır ve portalin çözdüğü iş operatörün masasına döner. Bu yüzden bildirim, gönderilip gönderilmediği **sorulabilir** bir kayıttır — gönder-ve-unut bir yan etki değil. Ekranlar: `/panel/bildirimler` (tercihler, herkese açık), `/panel/bildirim-kaydi` (gönderim kaydı, `NOTIFICATION_LOG_VIEW`).
+
+- **İşlemsel ileti ile ticari ileti aynı borudan geçmez.** Kampanya iletisi 6563 sayılı kanun gereği İYS izni ister; sipariş bildirimi istemez. Bu modül ticari ileti göndermez — ikisini birleştirmek, izinsiz gönderimi bir yapılandırma hatası kadar yakın hale getirirdi.
+- **Kuyruk outbox'tan ayrıdır.** Outbox siparişin Logo'ya ulaşmasını garanti eder; orada biriken bir e-posta hatası sipariş aktarımını geciktirir. Muhasebe sisteminin beklemesi ile bir hatırlatmanın gecikmesi aynı ağırlıkta değildir.
+- **Kayıt iş verisiyle aynı işlemde yazılır, gönderim kuyruktan yapılır.** Sağlayıcıya yapılan bir HTTP çağrısı sipariş işlemini posta sunucusunun yanıt süresine bağlar ve kilitleri uzatır.
+- **İçerik kuyruğa yazılırken üretilir ve donar.** Gönderim anında yeniden üretmek, aradan geçen sürede değişen bir tutarla (iade faturası, kısmi iptal) kullanıcının bildirilmiş olması gerekenden başka bir mesaj göndermek olurdu. Gönderilmiş kaydın metni ve alıcısı **veritabanı tetikleyicisiyle** kilitlidir.
+- **Kör Sipariş Modu posta kutusunda da geçerlidir.** Arayüzde özenle gizlenen tutarın e-postayla sızması gizlemeyi bastan anlamsız kılar; metin alıcının rolüne göre üretilir ve parasal konular (tahsilat, vade) `BALANCE_VIEW` yetkisi olmayana **hiç üretilmez** — "vadesi geçen belgeniz var" cümlesi tek başına da ticari bilgidir. Kural `apps/api/src/notification/notification-template.spec.ts` ile kilitlenmiştir.
+- **Güvenlik ve onay bekleyen sipariş konuları kapatılamaz.** Hesabı ele geçirilen kullanıcının bunu öğrenmesinin tek yolu güvenlik bildirimidir ve saldırganın ilk işi onu kapatmak olurdu; onay bildirimi kapatıldığında ise zarar kullanıcıya değil, siparişi bekleyen bayiye olur (bekleyen siparişin stoğu rezervedir).
+- **Geçersiz adres kalıcı hatadır** ve deneme hakkını tüketmeden kapatılır: altı kez denemek sağlayıcı nezdinde gönderen itibarını düşürür ve *geçerli* adreslere giden mesajları da istenmeyen klasörüne iter. Geçici hata (ağ, 5xx, 429) üstel geri çekilmeyle tekrarlanır.
+- **Gönderilmeyen kayıt da yazılır.** "Bu bayiye vade hatırlatması gitti mi?" sorusunun cevabı "hayır, tercihi kapalıydı" olabilir; cevapsız kalamaz.
+- **Vade hatırlatması belge başına değil bayi başına** üretilir (dört ayrı e-posta, hatırlatmayı spam'e çevirir ve bir sonrakini okunmadan sildirir), günde bir kez gönderilir ve yerel saat 09:00–20:00 dışına ertelenir. Bloke bayiye otomatik hatırlatma gitmez — blokaj insan kararıdır ve yürüyen bir görüşme vardır.
+- **Mobil jeton kayıtta durmaz:** kuyrukta SHA-256 özeti tutulur, gerçek jeton gönderim anında cihaz kaydından çözülür; cihaz iptal edilmişse mesaj gönderilmez.
+- Üretimde `MAIL_API_URL` / `MAIL_API_KEY` / `MAIL_FROM` eksikse uygulama **açılmaz**. Bildirim gönderemeyen bir portal, güvenlik uyarısını da gönderemez.
+
 ### Logo ERP entegrasyon katmanı
 
 Bulut API ile şirket içindeki Logo arasında yalnızca **mTLS ile korunan bir tünel** vardır ve **bağlantıyı her zaman bulut başlatır** — şirket içi ağda dışarıdan erişilebilen bir uç bulunmaz. Köprü yalnızca yanıt verir, buluta hiç çağrı yapmaz.
@@ -238,9 +254,9 @@ Tasarım ilkeleri: birincil eylemler ekranın alt şeridinde sabit durur (bir el
 1. **e-Belge üretim hattı** — entegratör bağlantısı, UBL-TR üretimi, GİB durum takibi (arşiv ve sunum tarafı hazır)
 2. **On-prem köprünün saha sertleştirmesi** — iskelet hazır (`apps/logo-bridge`); Logo Object Service çağrıları müşteri kurulumunda doğrulanacak
 3. **Xcode proje hedefi** — iOS kaynakları hazır; `.xcodeproj` oluşturulup CI'a bağlanacak
-4. **Bildirim kanalı** — sipariş durumu ve vade hatırlatması için e-posta / push
+4. **Bildirim şablon yönetimi** — metinler koda gömülüdür; kiracı bazında düzenleme ekranı sonraki adımdır
 
-Tamamlananlar: stok rezervasyonu ve sipariş motoru, matris fiyat ve kademeli iskonto, cari hesap / ekstre / yaşlandırma, tahsilat kaydı, sipariş risk kalkanı, Logo entegrasyonunun bulut tarafı ve köprü iskeleti, 3D Secure sanal POS, DBS, e-Belge arşivi, saha yönetimi, toplu sipariş içe aktarımı, kullanıcı yönetimi, denetim kaydı sorgulama ve iOS uygulamasının çekirdek akışları.
+Tamamlananlar: stok rezervasyonu ve sipariş motoru, matris fiyat ve kademeli iskonto, cari hesap / ekstre / yaşlandırma, tahsilat kaydı, sipariş risk kalkanı, Logo entegrasyonunun bulut tarafı ve köprü iskeleti, 3D Secure sanal POS, DBS, e-Belge arşivi, saha yönetimi, toplu sipariş içe aktarımı, kullanıcı yönetimi, denetim kaydı sorgulama, bildirim kanalı ve iOS uygulamasının çekirdek akışları.
 
 Temel altyapı (`OutboxEvent`, `IdempotencyKey`, denetim zinciri) bu modüller için şemada hazırdır.
 
