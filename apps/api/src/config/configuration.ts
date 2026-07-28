@@ -97,6 +97,39 @@ const envSchema = z
     /** Imzali indirme baglantisinin omru. Kisa tutulur: baglanti paylasilabilir. */
     EDOCUMENT_LINK_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
 
+    /**
+     * Bildirim gonderimi.
+     *
+     * Saglayici HTTP ucu uzerinden konusulur; SMTP kutuphanesi yerine tek bir
+     * `NotificationTransport` arayuzu vardir ve SMTP isteyen kurulum yalnizca
+     * o arayuzu uygular. Boylece kimlik bilgisi, zaman asimi ve hata
+     * siniflandirmasi tek yerde kalir.
+     *
+     * Yapilandirma EKSIKSE gonderim yapilmaz; mesajlar "gonderilmedi" olarak
+     * kaydedilir ve ekranda gorunur. Sessizce basarili saymak, portalin
+     * bildirdigi ama kimsenin almadigi bir dunyayi uretir.
+     */
+    MAIL_API_URL: z.string().url().optional(),
+    MAIL_API_KEY: z.string().optional(),
+    MAIL_FROM: z.string().email().optional(),
+    MAIL_FROM_NAME: z.string().default('ToptanPortal'),
+    MAIL_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).default(8000),
+
+    /** Mobil bildirim rolesi. Tanimsizsa PUSH kanali kapali kabul edilir. */
+    PUSH_API_URL: z.string().url().optional(),
+    PUSH_API_KEY: z.string().optional(),
+
+    JOB_NOTIFICATION_DISPATCH_SECONDS: z.coerce.number().int().min(10).max(600).default(30),
+    JOB_DUE_REMINDER_SECONDS: z.coerce.number().int().min(300).max(86400).default(3600),
+    /** Vadesine bu kadar gun kalan belge icin hatirlatma uretilir. */
+    DUE_REMINDER_LEAD_DAYS: z.coerce.number().int().min(0).max(30).default(3),
+    /**
+     * Bildirim kaydinin saklama suresi. KVKK gereginden uzun saklamayi
+     * yasaklar: bu tablo alici adreslerini ve ticari iliskinin ayrintisini
+     * tasir, sinirsiz buyumesi icin bir sebep yoktur.
+     */
+    NOTIFICATION_RETENTION_DAYS: z.coerce.number().int().min(30).max(3650).default(180),
+
     LOGO_BRIDGE_BASE_URL: z.string().url().optional(),
     LOGO_BRIDGE_CLIENT_CERT_PATH: z.string().optional(),
     LOGO_BRIDGE_CLIENT_KEY_PATH: z.string().optional(),
@@ -121,6 +154,27 @@ const envSchema = z
           message: `${key} üretim ortamında şablon değeriyle bırakılamaz.`,
         });
       }
+    }
+
+    /* Posta yapilandirmasi ya tamamdir ya da yoktur. Yarim yapilandirma
+       (adres var, anahtar yok) uretimde en kotu haldir: uygulama acilir,
+       kullanici sifre sifirlama bekler ve hicbir sey gelmez. */
+    const mailFields = [
+      ['MAIL_API_URL', env.MAIL_API_URL],
+      ['MAIL_API_KEY', env.MAIL_API_KEY],
+      ['MAIL_FROM', env.MAIL_FROM],
+    ] as const;
+
+    const eksikMail = mailFields.filter(([, value]) => !value).map(([key]) => key);
+
+    if (eksikMail.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [eksikMail[0] as string],
+        message:
+          `Üretim ortamında e-posta gönderimi zorunludur; eksik alanlar: ${eksikMail.join(', ')}. ` +
+          'Bildirim gönderemeyen bir portal, güvenlik uyarısını da gönderemez.',
+      });
     }
 
     if (!env.SUPER_ADMIN_IP_WHITELIST_ENFORCED) {

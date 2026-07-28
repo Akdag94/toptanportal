@@ -205,6 +205,19 @@ export const updatePreferencesSchema = z.object({
 export type UpdatePreferencesRequest = z.infer<typeof updatePreferencesSchema>;
 
 // ---------------------------------------------------------------------------
+// Mobil cihaz kaydi
+// ---------------------------------------------------------------------------
+
+export const registerPushDeviceSchema = z.object({
+  token: z.string().trim().min(20).max(255),
+  /** WEB kabul edilmez: tarayici bildirimi ayri bir izin akisidir. */
+  platform: z.enum(['IOS', 'ANDROID']),
+  deviceName: z.string().trim().max(80).optional(),
+});
+
+export type RegisterPushDeviceRequest = z.infer<typeof registerPushDeviceSchema>;
+
+// ---------------------------------------------------------------------------
 // Sessiz saatler
 // ---------------------------------------------------------------------------
 
