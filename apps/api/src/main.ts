@@ -63,6 +63,11 @@ async function bootstrap(): Promise<void> {
   // Kaba kuvvet ve kazima girisimlerinde govde boyutu da sinirlanir.
   app.useBodyParser('json', { limit: '1mb' });
 
+  /* Banka sanal POS'lari geri donusu FORM olarak gonderir (application/
+     x-www-form-urlencoded), JSON degil. Bu ayristirici olmadan POS yaniti bos
+     govdeyle gelir ve her odeme "işlem bulunamadı" ile biter. */
+  app.useBodyParser('urlencoded', { limit: '256kb', extended: false });
+
   if (!isProduction) {
     const document = SwaggerModule.createDocument(
       app,
