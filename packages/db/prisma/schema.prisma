@@ -134,6 +134,7 @@ model Tenant {
   bridgeChecks     BridgeHealthCheck[]
   posTransactions  PosTransaction[]
   dbsBatches       DbsBatch[]
+  eDocuments       EDocument[]
 
   @@map("tenants")
 }
@@ -197,6 +198,7 @@ model Company {
   payments         Payment[]
   posTransactions  PosTransaction[]
   dbsRecords       DbsRecord[]
+  eDocuments       EDocument[]
 
   @@unique([tenantId, logoCariCode])
   @@index([tenantId, isActive])
@@ -269,6 +271,7 @@ model User {
   recordedPayments  Payment[]           @relation("PaymentRecordedBy")
   posTransactions   PosTransaction[]    @relation("PosInitiatedBy")
   dbsBatches        DbsBatch[]          @relation("DbsCreatedBy")
+  eDocumentAccess   EDocumentAccess[]
 
   @@unique([tenantId, emailNormalized])
   @@index([tenantId, role, status])
@@ -1071,6 +1074,7 @@ model Order {
   lines         OrderLine[]
   reservations  StockReservation[]
   statusHistory OrderStatusHistory[]
+  eDocuments    EDocument[]
 
   @@unique([tenantId, orderNumber])
   @@index([companyId, status, createdAt])
@@ -1280,6 +1284,7 @@ model AccountEntry {
   payment     Payment?
   allocations PaymentAllocation[]
   dbsRecords  DbsRecord[]
+  eDocument   EDocument?
 
   @@unique([tenantId, logoFicheRef])
   @@index([companyId, entryDate])
@@ -1573,4 +1578,126 @@ model DbsRecord {
   @@index([companyId, status])
   @@index([batchId, status])
   @@map("dbs_records")
+}
+
+// ===========================================================================
+// e-Belge arsivi (e-Fatura, e-Arsiv, e-Irsaliye)
+// ===========================================================================
+
+enum EDocumentKind {
+  EINVOICE
+  EARCHIVE
+  EDESPATCH
+}
+
+enum EDocumentStatus {
+  DRAFT
+  SENT
+  DELIVERED
+  ACCEPTED
+  REJECTED
+  FAILED
+  CANCELLED
+}
+
+/// GIB'e iletilen elektronik belge.
+///
+/// TABLO BELGENIN KENDISINI TUTMAZ, YERINI TUTAR. XML ve PDF nesne deposunda
+/// (object storage) durur; burada yalnizca adres ve SHA-256 ozeti saklanir.
+/// Veritabaninda 10 yillik XML tasimak, yedekleme ve geri yukleme suresini
+/// belgelerin sayisiyla dogru orantili buyutur - felaket kurtarmayi saatlerden
+/// gunlere cikarir.
+///
+/// SILME YOKTUR. VUK 253 saklama suresi doldugunda bile silme, portalin degil
+/// arsiv yoneticisinin isidir; uygulama kullanicisina DELETE yetkisi verilmez.
+model EDocument {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  companyId String  @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  kind   EDocumentKind
+  status EDocumentStatus @default(DRAFT)
+
+  /// GIB fatura numarasi: 3 harf + 13 hane
+  documentNumber String @db.VarChar(20)
+
+  /// ETTN - Evrensel Tekil Tanimlama Numarasi. Belgeyi GIB nezdinde tekil
+  /// kilar; mutabakat ve itirazda kullanilan asil anahtardir.
+  uuid String @db.Uuid
+
+  issueDate DateTime @db.Date
+
+  netAmount  Decimal @db.Decimal(18, 4)
+  vatAmount  Decimal @db.Decimal(18, 4)
+  grandTotal Decimal @db.Decimal(18, 4)
+  currency   String  @default("TRY") @db.VarChar(3)
+
+  /// Faturayi doguran portal siparisi. Fatura Logo'da elle de kesilmis
+  /// olabilir; bu yuzden zorunlu degildir.
+  orderId String? @db.Uuid
+  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  /// Cari hareket karsiligi - ekstredeki satira baglar.
+  entryId String?       @unique @db.Uuid
+  entry   AccountEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
+
+  despatchDate DateTime? @db.Date
+
+  /// Alicinin kabul/ret yaniti ve gerekcesi.
+  responseNote String?   @db.VarChar(500)
+  respondedAt  DateTime? @db.Timestamptz(6)
+
+  /// Nesne deposundaki adresler. XML zorunlu, digerleri turetilmis.
+  xmlPath      String  @db.VarChar(500)
+  pdfPath      String? @db.VarChar(500)
+  envelopePath String? @db.VarChar(500)
+
+  /// XML'in SHA-256 ozeti. Indirilen dosyanin bozulmadigini dogrular ve
+  /// arsivde sessiz bir degisiklik olursa ortaya cikarir.
+  contentHash String @db.Char(64)
+  sizeBytes   Int    @default(0)
+
+  /// Entegrator tarafindaki kimlik - itirazlarda saglayiciya bu verilir.
+  providerRef String? @db.VarChar(64)
+  errorMessage String? @db.VarChar(500)
+
+  sentAt    DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+
+  accessLogs EDocumentAccess[]
+
+  @@unique([tenantId, uuid])
+  @@unique([tenantId, documentNumber])
+  @@index([companyId, issueDate])
+  @@index([tenantId, kind, issueDate])
+  @@index([tenantId, status])
+  @@map("e_documents")
+}
+
+/// Belgeye kimin ne zaman eristigi.
+///
+/// Fatura, ticari sir ve kisisel veri tasir. "Bu faturayi kim indirdi" sorusu
+/// bir veri sizintisi incelemesinde ilk sorulan sorudur ve denetim zincirine
+/// yazmak, indirme sikligi nedeniyle zinciri gereksiz sisirir - bu yuzden ayri
+/// ve daha ucuz bir tabloda tutulur.
+model EDocumentAccess {
+  id         BigInt    @id @default(autoincrement())
+  documentId String    @db.Uuid
+  document   EDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  format String  @db.VarChar(10)
+  ip     String? @db.VarChar(45)
+
+  accessedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([documentId, accessedAt])
+  @@index([userId, accessedAt])
+  @@map("e_document_access")
 }
