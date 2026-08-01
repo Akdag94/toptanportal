@@ -1,5 +1,4 @@
 import Foundation
-import UIKit
 
 /// ToptanPortal API istemcisi.
 ///
@@ -58,15 +57,13 @@ actor APIClient {
 
     // MARK: - Cihaz bilgisi
 
+    /// Cihaz bilgisi burada URETILMEZ, okunur.
+    ///
+    /// `UIDevice.current` ana aktore baglidir; bu islev ise jeton yenileme
+    /// gibi arka plan akislarindan cagrilir. Deger uygulama acilirken bir kez
+    /// okunup dondurulur (bkz. `CihazBilgisi`).
     nonisolated static func currentDevice() -> DeviceInfo {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-        return DeviceInfo(
-            deviceId: KeychainStore.deviceIdentifier(),
-            deviceName: UIDevice.current.name,
-            platform: "IOS",
-            appVersion: version,
-            osVersion: UIDevice.current.systemVersion
-        )
+        CihazBilgisi.anlik
     }
 
     // MARK: - Istek

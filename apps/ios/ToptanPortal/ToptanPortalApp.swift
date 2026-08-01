@@ -8,7 +8,13 @@ struct ToptanPortalApp: App {
         WindowGroup {
             KokEkran()
                 .environment(auth)
-                .task { await auth.uygulamaAcildi() }
+                .task {
+                    /* Cihaz bilgisi ANA AKTORDE, ilk agin cagrisindan once bir
+                       kez okunur ve donar; sonrasinda arka plan akislari
+                       (jeton yenileme) ana aktore atlamadan okuyabilir. */
+                    CihazBilgisi.hazirla()
+                    await auth.uygulamaAcildi()
+                }
         }
     }
 }
