@@ -46,6 +46,7 @@ export const ErrorCode = {
   PAYMENT_DECLINED: 'PAYMENT_DECLINED',
   PAYMENT_ALREADY_COMPLETED: 'PAYMENT_ALREADY_COMPLETED',
   POS_NOT_CONFIGURED: 'POS_NOT_CONFIGURED',
+  EDOCUMENT_NOT_CONFIGURED: 'EDOCUMENT_NOT_CONFIGURED',
 
   // Sistem
   RATE_LIMITED: 'RATE_LIMITED',
@@ -117,6 +118,8 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   PAYMENT_DECLINED: 'Ödeme bankanız tarafından onaylanmadı.',
   PAYMENT_ALREADY_COMPLETED: 'Bu ödeme daha önce tamamlanmış.',
   POS_NOT_CONFIGURED: 'Kart ile ödeme şu anda kullanılamıyor.',
+  EDOCUMENT_NOT_CONFIGURED:
+    'e-Belge üretimi yapılandırılmamış; belge kesilemez. Arşivdeki belgeler görüntülenmeye devam eder.',
   RATE_LIMITED: 'Çok fazla istek gönderdiniz. Lütfen kısa bir süre sonra tekrar deneyin.',
   LOGO_UNAVAILABLE:
     'Muhasebe sistemine şu anda ulaşılamıyor. Siparişiniz kuyruğa alındı, bağlantı sağlandığında otomatik iletilecektir.',

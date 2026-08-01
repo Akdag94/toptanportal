@@ -17,14 +17,18 @@ import {
   ORDER_STATUS_LABELS,
   OrderStatus,
   Permission,
+  type IssueEDocumentResult,
   type OrderView,
 } from '@toptanportal/contracts';
 
-import { orderApi } from '../../../../lib/api-client';
+import { eDocumentApi, orderApi } from '../../../../lib/api-client';
 import { gun, miktar, para, tarihSaat } from '../../../../lib/bicim';
 import { useSession } from '../../../../lib/session-context';
 
 const IPTAL_EDILEBILIR: OrderStatus[] = [OrderStatus.PENDING_APPROVAL, OrderStatus.QUEUED];
+
+/** Belge yalnizca Logo'da onaylanmis siparisten kesilir. */
+const BELGE_KESILEBILIR: OrderStatus[] = [OrderStatus.CONFIRMED];
 
 export default function SiparisAyrintiSayfasi() {
   const { user } = useSession();
@@ -36,6 +40,7 @@ export default function SiparisAyrintiSayfasi() {
   const [yukleniyor, setYukleniyor] = useState(true);
   const [islemde, setIslemde] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
+  const [belge, setBelge] = useState<IssueEDocumentResult | null>(null);
 
   const yukle = useCallback(async () => {
     setYukleniyor(true);
@@ -66,12 +71,39 @@ export default function SiparisAyrintiSayfasi() {
     }
   }
 
+  /**
+   * Belge kesme GERI ALINAMAZ: numara tüketilir, belge hukuken doğar ve
+   * düzeltmesi ancak iade faturasıyla yapılır. Bu yüzden düğme onay ister —
+   * yanlışlıkla basılan bir düğme, defteri açıklanması gereken bir satırla
+   * doldurur.
+   */
+  async function belgeKes(): Promise<void> {
+    if (!window.confirm('Bu siparişten e-Belge kesilecek. İşlem geri alınamaz; devam edilsin mi?')) {
+      return;
+    }
+
+    setIslemde(true);
+    setHata(null);
+
+    try {
+      setBelge(await eDocumentApi.issue({ orderId: siparisId }));
+    } catch (error) {
+      setHata(error instanceof Error ? error.message : 'Belge kesilemedi.');
+    } finally {
+      setIslemde(false);
+    }
+  }
+
   if (yukleniyor) return <div className="bos-durum">Yükleniyor…</div>;
   if (!siparis) return <div className="uyari-kutu hata">{hata ?? 'Sipariş bulunamadı.'}</div>;
 
   const yetkiler = new Set(user?.permissions ?? []);
   const iptalEdilebilir =
     yetkiler.has(Permission.ORDER_CANCEL) && IPTAL_EDILEBILIR.includes(siparis.status);
+  /* Belge yalnizca ONAYLANMIS siparisten kesilir: onay bekleyen bir siparisin
+     faturasi, henuz alinmamis bir karari belgelemis olurdu. */
+  const belgeKesilebilir =
+    yetkiler.has(Permission.EDOCUMENT_ISSUE) && BELGE_KESILEBILIR.includes(siparis.status);
   const toplam = para(siparis.grandTotal, siparis.currency);
 
   return (
@@ -98,10 +130,38 @@ export default function SiparisAyrintiSayfasi() {
               {islemde ? 'İptal ediliyor…' : 'Siparişi İptal Et'}
             </button>
           )}
+          {belgeKesilebilir && belge === null && (
+            <button
+              type="button"
+              className="dugme dugme-kucuk"
+              disabled={islemde}
+              onClick={() => void belgeKes()}
+            >
+              {islemde ? 'Kesiliyor…' : 'e-Belge Kes'}
+            </button>
+          )}
         </div>
       </div>
 
       {hata && <div className="uyari-kutu hata">{hata}</div>}
+
+      {belge && (
+        <div className="uyari-kutu bilgi">
+          <strong>{belge.document.documentNumber}</strong> numaralı{' '}
+          {belge.document.kindLabel.toLocaleLowerCase('tr-TR')} kesildi. Belge arşive yazıldı;
+          entegratöre iletim arka planda yapılır ve durumu{' '}
+          <Link href="/panel/evraklar">Evraklar</Link> ekranından izlenir.
+          {belge.warnings.length > 0 && (
+            /* Uyarilar SESSIZCE yutulmaz: belge kesilmistir ve geri alinamaz,
+               uyari o yuzden ekranda durur. */
+            <ul style={{ margin: '8px 0 0 18px' }}>
+              {belge.warnings.map((uyari) => (
+                <li key={uyari}>{uyari}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {siparis.status === OrderStatus.REJECTED && siparis.rejectReason && (
         <div className="uyari-kutu hata">

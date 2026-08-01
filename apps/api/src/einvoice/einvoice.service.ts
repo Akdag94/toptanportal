@@ -181,6 +181,11 @@ export class EInvoiceService {
     };
   }
 
+  /** Tek belge gorunumu. Kapsam denetimi listeleme ile AYNI yoldan gecer. */
+  async view(principal: AuthenticatedPrincipal, documentId: string): Promise<EDocument> {
+    return this.toView(await this.loadInScope(principal, documentId));
+  }
+
   // -------------------------------------------------------------------------
   // Indirme
   // -------------------------------------------------------------------------

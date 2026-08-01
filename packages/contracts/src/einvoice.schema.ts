@@ -200,6 +200,39 @@ export const eDocumentBulkSchema = z.object({
 export type EDocumentBulkRequest = z.infer<typeof eDocumentBulkSchema>;
 
 // ---------------------------------------------------------------------------
+// Uretim hatti
+// ---------------------------------------------------------------------------
+
+/**
+ * Belge kesme talebi.
+ *
+ * Belge SIPARISTEN uretilir; serbest kalemli fatura portalin isi degildir.
+ * Portalin kestigi her fatura, portalde olusmus ve tutari portalde
+ * hesaplanmis bir siparisin karsiligidir - aksi halde ayni fatura hem Logo'da
+ * hem portalde farkli tutarlarla var olabilirdi.
+ */
+export const issueEDocumentSchema = z.object({
+  orderId: z.string().uuid(),
+  /** e-Fatura mi e-Arsiv mi olacagi ALICININ mukellefligine gore belirlenir. */
+  kind: z.nativeEnum(EDocumentKind).optional(),
+  note: z.string().trim().max(500).optional(),
+});
+
+export type IssueEDocumentRequest = z.infer<typeof issueEDocumentSchema>;
+
+export const issueEDocumentResultSchema = z.object({
+  document: eDocumentSchema,
+  /**
+   * Belgeyi gecersiz kilmayan ama insanin gormesi gereken durumlar
+   * (taninmayan birim kodu, eksik vergi dairesi). Sessizce yutulmaz: belge
+   * kesilmistir ve geri alinamaz, uyari o yuzden ekranda durur.
+   */
+  warnings: z.array(z.string()),
+});
+
+export type IssueEDocumentResult = z.infer<typeof issueEDocumentResultSchema>;
+
+// ---------------------------------------------------------------------------
 // Mutabakat
 // ---------------------------------------------------------------------------
 

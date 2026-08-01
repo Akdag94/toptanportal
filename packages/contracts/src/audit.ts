@@ -76,6 +76,16 @@ export const AuditAction = {
   IYS_SYNC_SUCCEEDED: 'consent.iys.sync.succeeded',
   IYS_SYNC_FAILED: 'consent.iys.sync.failed',
 
+  // --- e-Belge ---
+  /**
+   * Belge KESILDI. Geri alinamayan bir islemdir: numara tuketilmis, belge
+   * hukuken dogmustur ve duzeltmesi ancak iade faturasiyla yapilir. Kimin
+   * hangi siparisten hangi numarayi urettigi, defterin kendisi kadar onemlidir.
+   */
+  EDOCUMENT_ISSUED: 'e-document.issued',
+  EDOCUMENT_SENT: 'e-document.sent',
+  EDOCUMENT_STATUS_CHANGED: 'e-document.status.changed',
+
   // --- Bildirim ---
   /**
    * Bildirim metni degistirildi.
@@ -131,6 +141,9 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'payment.initiated': 'Tahsilat başlatıldı',
   'payment.succeeded': 'Tahsilat tamamlandı',
   'payment.failed': 'Tahsilat başarısız',
+  'e-document.issued': 'e-Belge kesildi',
+  'e-document.sent': 'e-Belge entegratöre iletildi',
+  'e-document.status.changed': 'e-Belge durumu değişti',
   'notification.template.changed': 'Bildirim metni değiştirildi',
   'notification.template.reset': 'Bildirim metni varsayılana döndürüldü',
   'integration.logo.sync.started': 'Logo senkronu başladı',

@@ -22,6 +22,7 @@ import { SyncChannel as SyncChannelContract } from '@toptanportal/contracts';
 import type { AppConfig } from '../config/configuration';
 import { IdempotencyService } from '../common/idempotency/idempotency.service';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { EDocumentDispatchService } from '../einvoice/edocument-dispatch.service';
 import { IntegrationService } from '../integration/integration.service';
 import { DueReminderService } from '../notification/due-reminder.service';
 import { NotificationDispatchService } from '../notification/notification-dispatch.service';
@@ -50,6 +51,7 @@ export class MaintenanceService implements OnModuleInit, OnModuleDestroy {
     private readonly integration: IntegrationService,
     private readonly notifications: NotificationDispatchService,
     private readonly dueReminders: DueReminderService,
+    private readonly eDocuments: EDocumentDispatchService,
   ) {
     const app = this.config.getOrThrow<AppConfig>('app');
     this.enabled = app.MAINTENANCE_JOBS_ENABLED;
@@ -134,6 +136,20 @@ export class MaintenanceService implements OnModuleInit, OnModuleDestroy {
           const silinen = await this.notifications.purgeExpired();
           return silinen > 0 ? `${silinen} bildirim kaydı silindi` : null;
         },
+      },
+      {
+        name: 'e-belge-gonderimi',
+        intervalSeconds: app.JOB_EDOCUMENT_DISPATCH_SECONDS,
+        /* Her belge bir ag cagrisidir ve entegrator imzalama yapar; kilit
+           tur suresinden belirgin sekilde uzun tutulur. */
+        lockTtlSeconds: 600,
+        run: () => this.dispatchEDocuments(),
+      },
+      {
+        name: 'e-belge-durum-takibi',
+        intervalSeconds: app.JOB_EDOCUMENT_STATUS_SECONDS,
+        lockTtlSeconds: 600,
+        run: () => this.trackEDocumentStatuses(),
       },
       {
         name: 'kopru-yoklamasi',
@@ -334,6 +350,40 @@ export class MaintenanceService implements OnModuleInit, OnModuleDestroy {
     }
 
     return toplam > 0 ? `${toplam} hatırlatma kuyruğa alındı` : null;
+  }
+
+  /**
+   * Kesilmis belgelerin entegratore iletimi.
+   *
+   * Kuyruk KIRACIDAN BAGIMSIZ islenir ve gonderim ETTN uzerinden
+   * idempotenttir; ayni belgenin iki kez gonderilmesi entegratorde yeni bir
+   * fatura dogurmaz.
+   */
+  private async dispatchEDocuments(): Promise<string | null> {
+    const { sent, failed, retried } = await this.eDocuments.dispatchBatch();
+
+    if (failed > 0) {
+      /* Kalici hata: belge kesildi, numara tuketildi ama GONDERILEMEDI.
+         Bu satir bir insanin gormesi gereken bir satirdir - fatura defterde
+         durur, musteride durmaz. */
+      this.logger.error(
+        `${failed} e-belge entegratöre iletilemedi (kalıcı hata). Bu faturalar ` +
+          'alıcıya ULAŞMADI ve manuel müdahale bekliyor.',
+      );
+    }
+
+    if (sent === 0 && failed === 0 && retried === 0) return null;
+
+    return `gönderildi=${sent} başarısız=${failed} tekrar=${retried}`;
+  }
+
+  /** GIB durum takibi. Kabul/ret farki burada portalin kaydina yazilir. */
+  private async trackEDocumentStatuses(): Promise<string | null> {
+    const { checked, changed } = await this.eDocuments.trackStatuses();
+
+    if (checked === 0) return null;
+
+    return `sorgulanan=${checked} değişen=${changed}`;
   }
 
   /**

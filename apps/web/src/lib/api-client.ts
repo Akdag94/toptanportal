@@ -45,6 +45,8 @@ import type {
   EDocumentQuery,
   EDocumentSummary,
   ErrorCode,
+  IssueEDocumentRequest,
+  IssueEDocumentResult,
   IntegrationStatus,
   LoginResponse,
   OrderListQuery,
@@ -615,6 +617,16 @@ export const eDocumentApi = {
    */
   link: (documentId: string, format: EDocumentFormat) =>
     request<EDocumentLink>(`/e-documents/${documentId}/link${toQuery({ format })}`),
+
+  /**
+   * Siparisten belge keser. GERI ALINAMAZ: numara tuketilir, belge hukuken
+   * dogar ve duzeltmesi ancak iade faturasiyla yapilir.
+   *
+   * Uc nokta belgeyi keser, GONDERMEZ; entegratore iletim bakim gorevinden
+   * yapilir ve kullanici saglayicinin yanit suresini beklemez.
+   */
+  issue: (body: IssueEDocumentRequest) =>
+    request<IssueEDocumentResult>('/e-documents/issue', { method: 'POST', body }),
 };
 
 // ---------------------------------------------------------------------------

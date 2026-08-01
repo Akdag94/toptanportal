@@ -98,6 +98,44 @@ const envSchema = z
     EDOCUMENT_LINK_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
 
     /**
+     * e-Belge uretim hatti (entegrator baglantisi).
+     *
+     * Hicbiri tanimli degilse belge URETIMI kapalidir; arsiv ve sunum tarafi
+     * calismaya devam eder. Yarim yapilandirma kabul edilmez: adresi olup
+     * anahtari olmayan bir kurulum, faturayi uretip gonderemez ve belge
+     * numarasini tuketmis olur.
+     *
+     * MALI MUHUR portalde DEGILDIR. Imzalama entegratorde yapilir; muhurun
+     * ozel anahtarini bir web uygulamasinin surecine koymak, o surecin her
+     * acigini imza yetkisine cevirir.
+     */
+    EINVOICE_PROVIDER_URL: z.string().url().optional(),
+    EINVOICE_API_KEY: z.string().optional(),
+    /** Belgeyi kesen firmanin VKN'si. Belgedeki satici tarafinin kimligidir. */
+    EINVOICE_SENDER_TAX_NUMBER: z.string().regex(/^\d{10}$/).optional(),
+    EINVOICE_SENDER_TITLE: z.string().optional(),
+    EINVOICE_SENDER_TAX_OFFICE: z.string().optional(),
+    EINVOICE_SENDER_ADDRESS: z.string().optional(),
+    EINVOICE_SENDER_CITY: z.string().optional(),
+    EINVOICE_SENDER_DISTRICT: z.string().optional(),
+    /** Belge numarasinin 3 harfli seri onu (ornek: MRM2026000000431). */
+    EINVOICE_SERIES_PREFIX: z
+      .string()
+      .regex(/^[A-ZÇĞİÖŞÜ]{3}$/, 'Seri önü tam üç büyük harf olmalıdır.')
+      .default('TPL'),
+    EINVOICE_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60000).default(15000),
+    /** Belgeyi entegratore gonderme turu. */
+    JOB_EDOCUMENT_DISPATCH_SECONDS: z.coerce.number().int().min(15).max(3600).default(60),
+    /**
+     * GIB durum takibi turu.
+     *
+     * Gonderilmis bir belgenin akibetini SORMAK zorundayiz: entegrator geri
+     * bildirim yapsa bile o bildirim kaybolabilir ve "fatura ulasti mi"
+     * sorusunun cevabini portalin kendi kaydindan verebilmesi gerekir.
+     */
+    JOB_EDOCUMENT_STATUS_SECONDS: z.coerce.number().int().min(60).max(86400).default(900),
+
+    /**
      * Bildirim gonderimi.
      *
      * Saglayici HTTP ucu uzerinden konusulur; SMTP kutuphanesi yerine tek bir
@@ -281,6 +319,27 @@ export function loadConfiguration(): AppConfig {
 
   if (isProduction && env.LOGO_BRIDGE_BASE_URL === undefined) {
     throw new Error('Üretim ortamında LOGO_BRIDGE_BASE_URL tanımlı olmalıdır.');
+  }
+
+  /* e-Belge uretimi ya tamamdir ya da yoktur. Yarim yapilandirmayla uretilen
+     bir fatura, belge numarasini TUKETIR ve gonderilemez; tuketilmis numara
+     defterde iptal edilmis bir belge olarak durur ve aciklanmasi gerekir. */
+  const eInvoiceFields = [
+    env.EINVOICE_PROVIDER_URL,
+    env.EINVOICE_API_KEY,
+    env.EINVOICE_SENDER_TAX_NUMBER,
+    env.EINVOICE_SENDER_TITLE,
+  ];
+
+  if (
+    eInvoiceFields.some((value) => value !== undefined) &&
+    eInvoiceFields.some((value) => value === undefined)
+  ) {
+    throw new Error(
+      'e-Belge yapılandırması eksik. EINVOICE_PROVIDER_URL, EINVOICE_API_KEY, ' +
+        'EINVOICE_SENDER_TAX_NUMBER ve EINVOICE_SENDER_TITLE ya birlikte tanımlanmalı ' +
+        'ya da hiçbiri tanımlanmamalıdır.',
+    );
   }
 
   return {

@@ -30,22 +30,52 @@ import {
   Permission,
   eDocumentBulkSchema,
   eDocumentQuerySchema,
+  issueEDocumentSchema,
   type EDocumentBulkRequest,
   type EDocumentLink,
   type EDocumentPage,
   type EDocumentQuery,
   type EDocumentSummary,
+  type IssueEDocumentRequest,
+  type IssueEDocumentResult,
 } from '@toptanportal/contracts';
 
 import { ClientIp, CurrentUser, Public, RateLimit, RequirePermissions } from '../common/decorators';
 import { zodBody } from '../common/pipes/zod-validation.pipe';
 import type { AuthenticatedPrincipal } from '../common/context/request-context';
+import { EDocumentIssueService } from './edocument-issue.service';
 import { EInvoiceService } from './einvoice.service';
 
 @ApiTags('e-Belge Arşivi')
 @Controller('e-documents')
 export class EInvoiceController {
-  constructor(private readonly invoices: EInvoiceService) {}
+  constructor(
+    private readonly invoices: EInvoiceService,
+    private readonly issuer: EDocumentIssueService,
+  ) {}
+
+  /**
+   * Siparisten belge keser.
+   *
+   * GERI ALINAMAZ: numara tuketilir, belge hukuken dogar ve duzeltmesi ancak
+   * iade faturasiyla yapilir. Hiz siniri bu yuzden dardir - toplu ve yanlislikla
+   * yapilan bir cagri, defteri bosuna doldurur.
+   *
+   * Uc nokta belgeyi KESER, GONDERMEZ. Iletim bakim gorevinden yapilir; aksi
+   * halde kullanicinin istegi entegratorun yanit suresine baglanirdi ve zaman
+   * asiminda belgenin kesilip kesilmedigi bilinemezdi.
+   */
+  @Post('issue')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.EDOCUMENT_ISSUE)
+  @RateLimit({ limit: 60, windowSeconds: 300, scope: 'USER' })
+  @ApiOperation({ summary: 'Siparişten e-Belge kes' })
+  issue(
+    @CurrentUser() principal: AuthenticatedPrincipal,
+    @Body(zodBody(issueEDocumentSchema)) body: IssueEDocumentRequest,
+  ): Promise<IssueEDocumentResult> {
+    return this.issuer.issueFromOrder(principal, body);
+  }
 
   @Get()
   @RequirePermissions(Permission.INVOICE_DOWNLOAD)

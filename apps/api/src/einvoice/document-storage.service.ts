@@ -2,8 +2,13 @@
  * ToptanPortal API - e-Belge Deposu
  *
  * Belgeler dosya sisteminde tutulur ve yol, veritabanindaki `xmlPath` alanindan
- * gelir. Tek isi okumaktir: bu servis belge YAZMAZ, cunku e-belgeyi ureten
- * taraf entegratordur; portal onu arsivler ve sunar.
+ * gelir.
+ *
+ * YAZMA YALNIZCA URETIM HATTINA ACIKTIR (bkz. edocument-issue.service.ts):
+ * portal UBL-TR XML'ini kendisi uretir, entegrator onu imzalar ve GIB'e
+ * iletir. Yazilan dosya BIR DAHA DEGISTIRILMEZ - `write` var olan bir dosyanin
+ * uzerine yazmayi reddeder. Arsivdeki bir belgeyi sessizce degistirmek,
+ * saklama yukumlulugunu bir dosya kopyalama hatasi kadar kolay ihlal eder.
  *
  * YOL DOGRULAMASI kritik onemdedir. `xmlPath` veritabanindan gelir ama bir gun
  * baska bir kaynaktan (entegrator yaniti, elle duzeltme, gecis betigi)
@@ -16,8 +21,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
-import { isAbsolute, normalize, resolve, sep } from 'node:path';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { dirname, isAbsolute, normalize, resolve, sep } from 'node:path';
 import type { ReadStream } from 'node:fs';
 
 import type { AppConfig } from '../config/configuration';
@@ -72,6 +77,34 @@ export class DocumentStorageService {
       this.logger.error(`Arşivde bulunamayan belge: ${relativePath}`);
       return null;
     }
+  }
+
+  /**
+   * Belgeyi arsive yazar ve ozetini dondurur.
+   *
+   * UZERINE YAZMAZ. Ayni yol ikinci kez geldiginde istisna atilir: e-belge
+   * bir kez uretilir ve degismez; ayni yola ikinci bir yazim, ya bir numara
+   * cakismasi ya da bir tekrar denemenin yanlis yerde tekrarlanmasidir.
+   * Ikisinde de dogru davranis, var olan belgeyi KORUMAKTIR.
+   *
+   * `wx` bayragi bu kontrolu isletim sistemine birakir; once `stat` ile
+   * bakip sonra yazmak, iki es zamanli yazim arasinda acik bir pencere
+   * birakirdi.
+   */
+  async write(relativePath: string, content: string): Promise<{ sizeBytes: number; hash: string }> {
+    const absolute = this.resolveSafe(relativePath);
+
+    if (absolute === null) {
+      throw new Error(`Kök dizin dışına çıkan belge yolu: ${relativePath}`);
+    }
+
+    await mkdir(dirname(absolute), { recursive: true });
+    await writeFile(absolute, content, { encoding: 'utf8', flag: 'wx' });
+
+    return {
+      sizeBytes: Buffer.byteLength(content, 'utf8'),
+      hash: createHash('sha256').update(content, 'utf8').digest('hex'),
+    };
   }
 
   /**

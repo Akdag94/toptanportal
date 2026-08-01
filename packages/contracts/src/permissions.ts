@@ -82,6 +82,14 @@ export const Permission = {
    * portalin bayiye verdigi sozun sozlerini degistiriyordur.
    */
   NOTIFICATION_TEMPLATE_MANAGE: 'notification:template:manage',
+  /**
+   * e-Belge kesme.
+   *
+   * INDIRMEDEN (INVOICE_DOWNLOAD) ayridir: indirme kesilmis bir belgeyi
+   * okur, bu yetki YENI bir belge dogurur ve dogan belge geri alinamaz -
+   * duzeltmesi ancak iade faturasiyla yapilir.
+   */
+  EDOCUMENT_ISSUE: 'e-document:issue',
 } as const;
 
 export type Permission = (typeof Permission)[keyof typeof Permission];
@@ -119,6 +127,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     Permission.IP_WHITELIST_MANAGE,
     Permission.NOTIFICATION_LOG_VIEW,
     Permission.NOTIFICATION_TEMPLATE_MANAGE,
+    Permission.EDOCUMENT_ISSUE,
   ],
 
   /**

@@ -12,6 +12,7 @@ import { Logger } from '@nestjs/common';
 import type { IdempotencyService } from '../common/idempotency/idempotency.service';
 import type { PrismaService } from '../common/prisma/prisma.service';
 import type { IntegrationService } from '../integration/integration.service';
+import type { EDocumentDispatchService } from '../einvoice/edocument-dispatch.service';
 import type { DueReminderService } from '../notification/due-reminder.service';
 import type { NotificationDispatchService } from '../notification/notification-dispatch.service';
 import type { StockService } from '../stock/stock.service';
@@ -30,6 +31,7 @@ interface Overrides {
   probe?: jest.Mock;
   dispatchNotifications?: jest.Mock;
   dueReminderRun?: jest.Mock;
+  dispatchEDocuments?: jest.Mock;
 }
 
 function build(overrides: Overrides = {}) {
@@ -47,6 +49,8 @@ function build(overrides: Overrides = {}) {
       JOB_BRIDGE_PROBE_SECONDS: 300,
       JOB_NOTIFICATION_DISPATCH_SECONDS: 30,
       JOB_DUE_REMINDER_SECONDS: 3600,
+      JOB_EDOCUMENT_DISPATCH_SECONDS: 60,
+      JOB_EDOCUMENT_STATUS_SECONDS: 900,
     }),
   } as unknown as ConfigService;
 
@@ -93,6 +97,15 @@ function build(overrides: Overrides = {}) {
     probe: overrides.probe ?? jest.fn().mockResolvedValue(null),
   } as unknown as IntegrationService;
 
+  /* Entegrator yapilandirilmamis kurulumda uretim hatti sessizdir: hicbir
+     belge gonderilmez ve hicbir durum sorulmaz. */
+  const eDocuments = {
+    dispatchBatch:
+      overrides.dispatchEDocuments ??
+      jest.fn().mockResolvedValue({ sent: 0, failed: 0, retried: 0 }),
+    trackStatuses: jest.fn().mockResolvedValue({ checked: 0, changed: 0 }),
+  } as unknown as EDocumentDispatchService;
+
   return {
     service: new MaintenanceService(
       config,
@@ -103,6 +116,7 @@ function build(overrides: Overrides = {}) {
       integration,
       notifications,
       dueReminders,
+      eDocuments,
     ),
     lock,
     stock,
