@@ -138,6 +138,7 @@ model Tenant {
   visitNotes      VisitNote[]
   salesTargets    SalesTarget[]
   notifications   NotificationMessage[]
+  notificationTemplates NotificationTemplate[]
 
   @@map("tenants")
 }
@@ -281,6 +282,7 @@ model User {
   notifications       NotificationMessage[]    @relation("NotificationRecipient")
   notificationPrefs   NotificationPreference[]
   pushDevices         PushDevice[]
+  notificationTemplates NotificationTemplate[]   @relation("NotificationTemplateEditor")
 
   @@unique([tenantId, emailNormalized])
   @@index([tenantId, role, status])
@@ -1924,4 +1926,40 @@ model PushDevice {
   @@unique([token])
   @@index([userId, revokedAt])
   @@map("push_devices")
+}
+
+/// Kiracinin kendi bildirim metni.
+///
+/// SATIR YOKSA VARSAYILAN YURURLUKTEDIR. Kurulumda her kiraci icin on iki
+/// satir uretmek, kodda duran varsayilan metin iyilestirildiginde eski
+/// kiracilari eski metinde birakirdi; "varsayilana don" da bu yuzden satiri
+/// gunceller degil SILER.
+///
+/// Metin bir kez uretildikten sonra kuyruk kaydinda DONAR (bkz.
+/// NotificationMessage). Sablonun sonradan degismesi, gonderilmis bir iletinin
+/// kaydini degistirmez - aksi halde "biz size boyle yazmistik" cumlesi
+/// dogrulanamaz olurdu.
+model NotificationTemplate {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  topic   NotificationTopic
+  channel NotificationChannel
+
+  /// {{degisken}} tasiyan ham metin. Yerine koyma gonderim aninda degil,
+  /// KUYRUGA YAZILIRKEN yapilir.
+  subjectTemplate String @db.VarChar(200)
+  bodyTemplate    String @db.Text
+
+  /// Metni son degistiren kisi. Kullanici silinse bile kayit durur: "bu
+  /// cumleyi kim yazdi" sorusunun cevabi hesabin akibetine bagli degildir.
+  updatedByUserId String? @db.Uuid
+  updatedBy       User?   @relation("NotificationTemplateEditor", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([tenantId, topic, channel])
+  @@map("notification_templates")
 }

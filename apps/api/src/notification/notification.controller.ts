@@ -18,6 +18,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ClientPlatform, Prisma, type NotificationTopic as DbTopic } from '@toptanportal/db';
 import {
   CHANNEL_LABELS,
+  ErrorCode,
   NotificationChannel,
   NotificationStatus,
   NotificationTopic,
@@ -25,18 +26,26 @@ import {
   TOPIC_LABELS,
   isTopicMandatory,
   notificationQuerySchema,
+  notificationTemplatePreviewSchema,
   registerPushDeviceSchema,
   updatePreferencesSchema,
+  upsertNotificationTemplateSchema,
   type NotificationPage,
   type NotificationPreferences,
   type NotificationQuery,
+  type NotificationTemplateList,
+  type NotificationTemplatePreviewRequest,
+  type NotificationTemplatePreviewResult,
   type RegisterPushDeviceRequest,
   type UpdatePreferencesRequest,
+  type UpsertNotificationTemplateRequest,
 } from '@toptanportal/contracts';
 
+import { ApiException } from '../common/exceptions/api.exception';
 import { CurrentUser, RequirePermissions } from '../common/decorators';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { NotificationService } from './notification.service';
+import { NotificationTemplateService } from './notification-template.service';
 import { DEFAULT_CHANNELS } from './notification-template';
 import { zodBody } from '../common/pipes/zod-validation.pipe';
 import type { AuthenticatedPrincipal } from '../common/context/request-context';
@@ -44,7 +53,10 @@ import type { AuthenticatedPrincipal } from '../common/context/request-context';
 @ApiTags('Bildirimler')
 @Controller('notifications')
 export class NotificationController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly templateService: NotificationTemplateService,
+  ) {}
 
   @Get('preferences')
   @ApiOperation({ summary: 'Kendi bildirim tercihlerim' })
@@ -249,6 +261,66 @@ export class NotificationController {
       pendingCount: bekleyen,
       failedCount: basarisiz,
     };
+  }
+
+  // -------------------------------------------------------------------------
+  // Sablonlar
+  //
+  // Gonderim kaydini GORMEKTEN ayri bir yetki ister: kayit gecmise bakar,
+  // sablon ise bundan sonra gidecek her iletiyi degistirir.
+  // -------------------------------------------------------------------------
+
+  @Get('templates')
+  @RequirePermissions(Permission.NOTIFICATION_TEMPLATE_MANAGE)
+  @ApiOperation({ summary: 'Bildirim metinleri' })
+  templates(
+    @CurrentUser() principal: AuthenticatedPrincipal,
+  ): Promise<NotificationTemplateList> {
+    return this.templateService.list(principal);
+  }
+
+  @Put('templates')
+  @RequirePermissions(Permission.NOTIFICATION_TEMPLATE_MANAGE)
+  @ApiOperation({ summary: 'Bildirim metnini değiştir' })
+  saveTemplate(
+    @CurrentUser() principal: AuthenticatedPrincipal,
+    @Body(zodBody(upsertNotificationTemplateSchema)) body: UpsertNotificationTemplateRequest,
+  ): Promise<NotificationTemplateList> {
+    return this.templateService.upsert(principal, body);
+  }
+
+  /**
+   * Onizleme metni KAYDETMEZ.
+   *
+   * Sablonu once kaydedip sonra gormek, hatali bir metnin yururlukte kaldigi
+   * bir aralik birakir - o aralikta bir siparis onaylanirsa bildirim o metinle
+   * gider ve geri alinamaz.
+   */
+  @Post('templates/preview')
+  @RequirePermissions(Permission.NOTIFICATION_TEMPLATE_MANAGE)
+  @ApiOperation({ summary: 'Şablon önizlemesi (yetkili ve kör mod)' })
+  previewTemplate(
+    @Body(zodBody(notificationTemplatePreviewSchema)) body: NotificationTemplatePreviewRequest,
+  ): NotificationTemplatePreviewResult {
+    return this.templateService.preview(body);
+  }
+
+  @Delete('templates/:topic/:channel')
+  @RequirePermissions(Permission.NOTIFICATION_TEMPLATE_MANAGE)
+  @ApiOperation({ summary: 'Şablonu varsayılana döndür' })
+  resetTemplate(
+    @CurrentUser() principal: AuthenticatedPrincipal,
+    @Param('topic') topic: string,
+    @Param('channel') channel: string,
+  ): Promise<NotificationTemplateList> {
+    const konu = Object.values(NotificationTopic).find((deger) => deger === topic);
+    const kanal = Object.values(NotificationChannel).find((deger) => deger === channel);
+
+    if (!konu || !kanal) {
+      throw ApiException.badRequest(ErrorCode.VALIDATION_FAILED, 'Geçersiz konu veya kanal.');
+    }
+
+    return this.templateService.reset(principal, konu, kanal);
   }
 
   /** Ekranin suzgec listeleri icin etiketler. */

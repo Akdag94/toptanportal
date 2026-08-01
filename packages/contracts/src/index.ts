@@ -11,4 +11,5 @@ export * from './pos.schema';
 export * from './einvoice.schema';
 export * from './field.schema';
 export * from './notification.schema';
+export * from './notification-template.schema';
 export * from './errors';

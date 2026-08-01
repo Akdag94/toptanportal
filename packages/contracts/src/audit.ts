@@ -76,6 +76,17 @@ export const AuditAction = {
   IYS_SYNC_SUCCEEDED: 'consent.iys.sync.succeeded',
   IYS_SYNC_FAILED: 'consent.iys.sync.failed',
 
+  // --- Bildirim ---
+  /**
+   * Bildirim metni degistirildi.
+   *
+   * Sablon, bundan sonra gidecek HER iletiyi degistirir; "portal bize boyle
+   * yazmisti" tartismasinda metnin ne zaman ve kimin tarafindan
+   * degistirildigi, gonderilmis iletinin kendisi kadar onemlidir.
+   */
+  NOTIFICATION_TEMPLATE_CHANGED: 'notification.template.changed',
+  NOTIFICATION_TEMPLATE_RESET: 'notification.template.reset',
+
   // --- Entegrasyon ---
   LOGO_SYNC_STARTED: 'integration.logo.sync.started',
   LOGO_SYNC_COMPLETED: 'integration.logo.sync.completed',
@@ -120,6 +131,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'payment.initiated': 'Tahsilat başlatıldı',
   'payment.succeeded': 'Tahsilat tamamlandı',
   'payment.failed': 'Tahsilat başarısız',
+  'notification.template.changed': 'Bildirim metni değiştirildi',
+  'notification.template.reset': 'Bildirim metni varsayılana döndürüldü',
   'integration.logo.sync.started': 'Logo senkronu başladı',
   'integration.logo.sync.completed': 'Logo senkronu tamamlandı',
   'integration.logo.sync.failed': 'Logo senkronu başarısız',

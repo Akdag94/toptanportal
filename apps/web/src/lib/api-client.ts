@@ -55,6 +55,10 @@ import type {
   NotificationPage,
   NotificationPreferences,
   NotificationQuery,
+  NotificationTemplateList,
+  NotificationTemplatePreviewRequest,
+  NotificationTemplatePreviewResult,
+  UpsertNotificationTemplateRequest,
   PaymentView,
   PlaceOrderRequest,
   PlaceOrderResult,
@@ -702,6 +706,24 @@ export const notificationApi = {
     request<{ topics: Record<string, string>; channels: Record<string, string> }>(
       '/notifications/labels',
     ),
+
+  templates: () => request<NotificationTemplateList>('/notifications/templates'),
+
+  saveTemplate: (body: UpsertNotificationTemplateRequest) =>
+    request<NotificationTemplateList>('/notifications/templates', { method: 'PUT', body }),
+
+  /* Onizleme KAYDETMEZ: hatali bir metnin yururlukte kaldigi bir aralik
+     birakmamak icin sablon once gorulur, sonra kaydedilir. */
+  previewTemplate: (body: NotificationTemplatePreviewRequest) =>
+    request<NotificationTemplatePreviewResult>('/notifications/templates/preview', {
+      method: 'POST',
+      body,
+    }),
+
+  resetTemplate: (topic: string, channel: string) =>
+    request<NotificationTemplateList>(`/notifications/templates/${topic}/${channel}`, {
+      method: 'DELETE',
+    }),
 };
 
 export { emitSessionChange };

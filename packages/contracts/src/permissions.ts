@@ -74,6 +74,14 @@ export const Permission = {
    * cevaplayan kaydi acar ve o kayit baskalarinin adreslerini icerir.
    */
   NOTIFICATION_LOG_VIEW: 'notification:log:view',
+  /**
+   * Bildirim metinlerini kiraci bazinda duzenleme.
+   *
+   * Gonderim kaydini GORMEKTEN ayri bir yetkidir: kayit gecmise bakar, sablon
+   * ise bundan sonra gidecek her iletiyi degistirir. Metni degistiren kisi,
+   * portalin bayiye verdigi sozun sozlerini degistiriyordur.
+   */
+  NOTIFICATION_TEMPLATE_MANAGE: 'notification:template:manage',
 } as const;
 
 export type Permission = (typeof Permission)[keyof typeof Permission];
@@ -110,6 +118,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     Permission.AUDIT_LOG_VIEW,
     Permission.IP_WHITELIST_MANAGE,
     Permission.NOTIFICATION_LOG_VIEW,
+    Permission.NOTIFICATION_TEMPLATE_MANAGE,
   ],
 
   /**

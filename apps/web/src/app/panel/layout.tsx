@@ -164,6 +164,11 @@ const MENU: MenuGrubu[] = [
         yol: '/panel/bildirim-kaydi',
         yetkiler: [Permission.NOTIFICATION_LOG_VIEW],
       },
+      {
+        baslik: 'Bildirim Metinleri',
+        yol: '/panel/bildirim-metinleri',
+        yetkiler: [Permission.NOTIFICATION_TEMPLATE_MANAGE],
+      },
     ],
   },
 ];

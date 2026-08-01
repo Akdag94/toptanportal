@@ -13,12 +13,14 @@ import { DueReminderService } from './due-reminder.service';
 import { NotificationController } from './notification.controller';
 import { NotificationDispatchService } from './notification-dispatch.service';
 import { NotificationService } from './notification.service';
+import { NotificationTemplateService } from './notification-template.service';
 import { MailTransport, PushTransport } from './notification-transport';
 
 @Module({
   controllers: [NotificationController],
   providers: [
     NotificationService,
+    NotificationTemplateService,
     NotificationDispatchService,
     DueReminderService,
     MailTransport,

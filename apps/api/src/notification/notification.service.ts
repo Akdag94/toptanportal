@@ -39,6 +39,7 @@ import { UserStatus, type PrismaTransactionClient } from '@toptanportal/db';
 
 import type { AppConfig } from '../config/configuration';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { NotificationTemplateService } from './notification-template.service';
 import { DEFAULT_CHANNELS, renderNotification, type NotificationPayload } from './notification-template';
 
 export interface EnqueueInput {
@@ -77,6 +78,7 @@ export class NotificationService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly templates: NotificationTemplateService,
     configService: ConfigService,
   ) {
     this.config = configService.getOrThrow<AppConfig>('app');
@@ -132,6 +134,12 @@ export class NotificationService {
 
     const ilkGonderim = this.ilkGonderimZamani(input.scheduled === true);
 
+    /* Kiracinin kendi metinleri. ONBELLEKTEN gelir; is verisiyle ayni islemde
+       calisan bu yol icin her satirda bir sorgu, kilitleri saglayicinin degil
+       ama veritabaninin sirtina yikardi. Sablonu olmayan konu/kanal icin
+       kodda duran varsayilan kullanilir. */
+    const sablonlar = await this.templates.forTenant(input.tenantId);
+
     const satirlar = uygunAlicilar.flatMap((alici) =>
       DEFAULT_CHANNELS[topic].map((channel) => {
         const tercih = tercihler.find((t) => t.userId === alici.id && t.channel === channel);
@@ -149,6 +157,9 @@ export class NotificationService {
           recipientName: alici.fullName,
           canSeeFinancials: canSeeFinancials(alici.role),
           webBaseUrl: this.config.WEB_BASE_URL,
+          /* Kiraci metni de AYNI motordan gecer: parasal degiskeni olmayan
+             satir, sablonu kim yazmis olursa olsun dusurulur. */
+          template: sablonlar.get(`${topic}:${channel}`) ?? null,
         });
 
         /* PUSH icin alici alanina cihaz jetonunun OZETI yazilir. Jetonun
