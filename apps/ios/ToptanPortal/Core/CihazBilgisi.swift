@@ -60,10 +60,17 @@ enum CihazBilgisi {
     /// Donanim tanimlayicisi ("iPhone15,2"). `uname` ana aktore bagli degildir.
     private static func donanimModeli() -> String {
         var sistem = utsname()
-        uname(&sistem)
+        guard uname(&sistem) == 0 else { return "iOS cihazı" }
 
-        let ad = withUnsafePointer(to: &sistem.machine) { isaretci in
-            isaretci.withMemoryRebound(to: CChar.self, capacity: MemoryLayout.size(ofValue: sistem.machine)) {
+        /* Alan ONCE yerel bir kopyaya alinir. `withUnsafePointer(to:)` verilen
+           degere OZEL erisim ister; kapasiteyi kapanisin icinde `sistem`
+           uzerinden hesaplamak, ayni alana es zamanli iki erisim demektir ve
+           derleyici bunu reddeder. */
+        let makine = sistem.machine
+        let kapasite = MemoryLayout.size(ofValue: makine)
+
+        let ad = withUnsafePointer(to: makine) { isaretci in
+            isaretci.withMemoryRebound(to: CChar.self, capacity: kapasite) {
                 String(cString: $0)
             }
         }

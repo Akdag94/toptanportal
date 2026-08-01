@@ -52,6 +52,18 @@ import { StockModule } from './stock/stock.module';
     ConfigModule.forRoot({
       isGlobal: true,
       cache: true,
+      /**
+       * Ortam dosyasi DEPO KOKUNDEDIR, uygulama dizininde degil: tek bir
+       * `.env`, API ile veritabani betiklerinin ayni degerleri okumasini
+       * saglar - iki ayri dosya, birinde degistirilen bir anahtarin digerinde
+       * eski kalmasi demektir.
+       *
+       * Yol calisma dizinine goredir ve `pnpm dev:api` komutu uygulama
+       * dizininde calisir; bu yuzden once koke bakilir, sonra uygulama
+       * dizinine. Uretimde degiskenler zaten surece verilir ve dosyanin
+       * bulunmamasi hata degildir.
+       */
+      envFilePath: ['../../.env', '.env'],
       load: [configurationFactory],
     }),
     PrismaModule,
