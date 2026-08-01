@@ -1,0 +1,103 @@
+# ToptanPortal iOS - Xcode proje tanimi (XcodeGen)
+#
+# NEDEN .xcodeproj DEPOYA KONMUYOR:
+#
+# `project.pbxproj` makine tarafindan uretilen, tek satirli kimliklerden olusan
+# ve iki kisi ayni anda dosya ekledi diye CATISAN bir dosyadir. Cakismasi elle
+# cozulemez; cozmeye calisan kisi genellikle bir tarafi secer ve digerinin
+# dosyalari projeden sessizce duser - derleme gecer, ekran kaybolur.
+#
+# Bu dosya ise okunabilir ve gozden gecirilebilir bir tanimdir. Proje ondan
+# URETILIR:
+#
+#     brew install xcodegen
+#     cd apps/ios && xcodegen generate
+#     open ToptanPortal.xcodeproj
+#
+# Kaynak listesi ELLE TUTULMAZ (`sources` bir dizini isaret eder): yeni bir
+# Swift dosyasi eklemek icin proje dosyasina dokunmak gerekmez, dolayisiyla
+# "dosyayi ekledim ama derlenmiyor" sorunu da olusmaz.
+
+name: ToptanPortal
+
+options:
+  bundleIdPrefix: com.toptanportal
+  deploymentTarget:
+    # SwiftUI'nin @Observable makrosu ve yeni gozlem modeli iOS 17 ister;
+    # kod bunu kullanir (bkz. AuthStore).
+    iOS: "17.0"
+  createIntermediateGroups: true
+  # Uretilen proje depoya girmez; her makinede yeniden uretilir.
+  generateEmptyDirectories: false
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    # Uyarilar okunmadigi surece yoktur; birikmelerine izin verilmez.
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: false
+    ENABLE_USER_SCRIPT_SANDBOXING: true
+    DEVELOPMENT_TEAM: ""
+
+targets:
+  ToptanPortal:
+    type: application
+    platform: iOS
+    sources:
+      - path: ToptanPortal
+    info:
+      path: ToptanPortal/Info.plist
+      properties:
+        CFBundleDisplayName: ToptanPortal
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        # Yalnizca dikey: uygulama bir eliyle mal tasiyan kullanici icin
+        # tasarlandi; yatay duzen o elde kullanilamaz.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # Barkod tarayici kamera ister. Aciklama metni kullanicinin gordugu
+        # cumledir; "izin gerekiyor" demek yerine NEDEN gerektigini soyler.
+        NSCameraUsageDescription:
+          Barkod okutarak hızlı sipariş verebilmeniz için kameraya erişilir.
+        NSFaceIDUsageDescription:
+          Kayıtlı oturumunuza güvenli şekilde erişmek için kullanılır.
+        # API adresi derleme ayarindan gelir; kaynak koduna gomulu bir adres,
+        # test ve uretim yapilarini ayirt edilemez kilar.
+        TOPTANPORTAL_API_URL: $(TOPTANPORTAL_API_URL)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.toptanportal.app
+        TARGETED_DEVICE_FAMILY: "1,2"
+        # Varsayilan gelistirme adresi. Uretim yapisinda CI tarafindan ezilir.
+        TOPTANPORTAL_API_URL: http://localhost:3001
+      configs:
+        Release:
+          TOPTANPORTAL_API_URL: https://api.toptanportal.com
+
+  ToptanPortalTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ToptanPortalTests
+    dependencies:
+      - target: ToptanPortal
+    settings:
+      base:
+        # Test paketi uygulamayi barindirir; @testable import bunu gerektirir.
+        GENERATE_INFOPLIST_FILE: true
+
+schemes:
+  ToptanPortal:
+    build:
+      targets:
+        ToptanPortal: all
+        ToptanPortalTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: true
+      targets:
+        - ToptanPortalTests
+    archive:
+      config: Release

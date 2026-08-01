@@ -41,7 +41,19 @@ Thumbs.db
 !.vscode/extensions.json
 
 # Xcode
+#
+# Proje dosyasi DEPOYA GIRMEZ: project.pbxproj makine tarafindan uretilir,
+# tek satirli kimliklerden olusur ve iki kisi ayni anda dosya ekledigi anda
+# catisir. Cakismasi elle cozulemez; cozmeye calisan kisi bir tarafi secer ve
+# digerinin dosyalari projeden sessizce duser. Proje `apps/ios/project.yml`
+# tanimindan uretilir: `cd apps/ios && xcodegen generate`.
+apps/ios/*.xcodeproj/
+apps/ios/*.xcworkspace/
 apps/ios/**/xcuserdata/
-apps/ios/**/*.xcworkspace/xcuserdata/
 apps/ios/**/DerivedData/
 apps/ios/**/.swiftpm/
+apps/ios/*.xcresult/
+
+# .NET
+apps/logo-bridge/**/bin/
+apps/logo-bridge/**/obj/

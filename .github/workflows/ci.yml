@@ -1,0 +1,68 @@
+# Bulut tarafinin (API, web, sozlesmeler) ve Logo koprusunun dogrulanmasi.
+#
+# Testler CALISAN BIR VERITABANI ISTEMEZ: birim testleri saf mantigi
+# dogrular (fiyatlama, kor mod suzgeci, UBL uretimi, denetim zinciri).
+# Veritabani gerektiren tumlesik testler ayri bir istir ve bu is akisini
+# altyapiya bagimli hale getirmemek icin buraya konmaz - kirmizi yanan ama
+# kodla ilgisi olmayan bir CI, bir sure sonra hic okunmaz.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.11'
+          cache: pnpm
+
+      - name: Bağımlılıklar
+        # --frozen-lockfile: kilit dosyasiyla uyusmayan bir package.json
+        # sessizce farkli surum kurmak yerine BURADA durur.
+        run: pnpm install --frozen-lockfile
+
+      - name: Prisma istemcisi ve paketler
+        run: pnpm -r --filter=./packages/** build
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Testler
+        run: pnpm -r test
+
+      - name: Derleme
+        run: pnpm build
+
+  bridge:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Derle
+        working-directory: apps/logo-bridge
+        # Kopru projesinde uyarilar hata sayilir; gozetimsiz calisan bir
+        # serviste "sonra bakariz" denen uyari, uretimde gece 03:00'te cozulur.
+        run: dotnet build -c Release
+
+      - name: Testler
+        working-directory: apps/logo-bridge
+        run: dotnet test -c Release --no-build

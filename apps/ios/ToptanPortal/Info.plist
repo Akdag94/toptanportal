@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Uygulama listesi.
+
+  XcodeGen bu dosyayi `project.yml` icindeki `info.properties` degerleriyle
+  URETIR; buradaki icerik, XcodeGen kullanmadan Xcode'da elle bir hedef
+  olusturmak isteyen kurulum icin baslangic noktasidir.
+
+  TOPTANPORTAL_API_URL bir DERLEME AYARINDAN gelir ($(...) ile). Adresi kaynak
+  koduna gommek, test yapisi ile uretim yapisini birbirinden ayirt edilemez
+  kilar; yanlis yapiyi magazaya gonderdiginizde ise bunu kullanicilar bildirir.
+-->
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>tr</string>
+    <key>CFBundleDisplayName</key>
+    <string>ToptanPortal</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+
+    <!-- Portal API adresi. Derleme ayarindan gelir. -->
+    <key>TOPTANPORTAL_API_URL</key>
+    <string>$(TOPTANPORTAL_API_URL)</string>
+
+    <!--
+      Izin metinleri kullanicinin GORDUGU cumlelerdir. "İzin gerekiyor" demek
+      yerine neden gerektigini soylerler; reddedilen bir kamera izni, barkod
+      tarayiciyi kullanilamaz hale getirir ve kullanici sebebini bilmeden
+      reddeder.
+    -->
+    <key>NSCameraUsageDescription</key>
+    <string>Barkod okutarak hızlı sipariş verebilmeniz için kameraya erişilir.</string>
+    <key>NSFaceIDUsageDescription</key>
+    <string>Kayıtlı oturumunuza güvenli şekilde erişmek için kullanılır.</string>
+
+    <key>UILaunchScreen</key>
+    <dict/>
+
+    <!--
+      Yalnizca dikey. Uygulama bir eliyle mal tasiyan kullanici icin
+      tasarlandi; yatay duzen o elde kullanilamaz.
+    -->
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+</dict>
+</plist>

@@ -1,0 +1,58 @@
+# iOS uygulamasinin derlenmesi ve testleri.
+#
+# Proje dosyasi DEPODA DURMAZ; `project.yml` tanimindan uretilir (bkz.
+# apps/ios/project.yml). Bu is akisi, tanimin gercekten derlenebilir bir proje
+# urettigini her degisiklikte dogrular - aksi halde "bende calisiyordu" ile
+# "CI'da yok" arasindaki fark, ilk surumden bir gun once anlasilir.
+
+name: iOS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/ios/**'
+      - '.github/workflows/ios.yml'
+  pull_request:
+    paths:
+      - 'apps/ios/**'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    # Xcode yalnizca macOS'ta calisir; baska bir kosucu secenegi yoktur.
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Araçları kur
+        # xcbeautify kosucu imajinda bulunabilir; acikca kurmak, imaj
+        # degistiginde is akisinin sessizce kirilmasini onler.
+        run: brew install xcodegen xcbeautify
+
+      - name: Projeyi üret
+        working-directory: apps/ios
+        run: xcodegen generate
+
+      - name: Derle ve test et
+        working-directory: apps/ios
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project ToptanPortal.xcodeproj \
+            -scheme ToptanPortal \
+            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcbeautify
+
+      - name: Test sonuçlarını yükle
+        # Basarisiz kosuda da yuklenir: sonuclara EN COK o zaman ihtiyac vardir.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-results
+          path: apps/ios/TestResults.xcresult
+          retention-days: 7

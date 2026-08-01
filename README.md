@@ -189,6 +189,33 @@ Bildirim teknik bir ayrıntı değil **ticari bir sözdür**: "siparişiniz onay
 - **Mobil jeton kayıtta durmaz:** kuyrukta SHA-256 özeti tutulur, gerçek jeton gönderim anında cihaz kaydından çözülür; cihaz iptal edilmişse mesaj gönderilmez.
 - Üretimde `MAIL_API_URL` / `MAIL_API_KEY` / `MAIL_FROM` eksikse uygulama **açılmaz**. Bildirim gönderemeyen bir portal, güvenlik uyarısını da gönderemez.
 
+### Bildirim metinleri (kiracı şablonları)
+
+Varsayılan metinler kodda durur; kiracı yalnızca **üzerine yazar** ve satırı silmek varsayılana döner. Ekran: `/panel/bildirim-metinleri` (`NOTIFICATION_TEMPLATE_MANAGE`).
+
+- **Şablon motoru kasıtlı olarak aptaldır.** Koşul, döngü, işlev yoktur; yalnızca `{{değişken}}` yerine değer konur. Kullanıcının düzenlediği bir metne mantık taşımak, o mantığın hatasını gönderilmiş bir iletide ortaya çıkarır — geri alınamayan tek işlemde.
+- **Kör Sipariş Modu bu katmanda da geçerlidir ve mekanizması şudur:** parasal değişken, görmeye yetkisi olmayan alıcı için **üretilmez**; değeri olmayan bir değişkeni içeren **satırın tamamı düşürülür**. Kiracı "Sipariş tutarı: {{tutar}}" yazsa bile o satır kör moddaki alıcıya gitmez. Değişkeni boş dizeyle değiştirmek "Sipariş tutarı:" gibi yarım bir satır bırakırdı; yarım satır, gizlenen şeyin varlığını yine de ele verir.
+- **Konu satırına parasal değer, kör moda ulaşan konularda konulamaz.** Sipariş durumu ve onay bildirimi fiyat görmeyen kullanıcıya da gider; konudaki bir değişken düşürülemez, konunun tamamını varsayılana döndürür — yani şablonu yazan kişi yazdığından başka bir konu satırı göndermiş olur. Tahsilat ve vade konularında bu kısıt yoktur: o bildirimler `BALANCE_VIEW` olmayan alıcıya zaten hiç üretilmez. Kural hem Zod şemasında hem **veritabanı kısıtında** durur.
+- **Tanınmayan değişken kaydetme anında reddedilir.** Yazım hatası (`{{tutari}}`) sessizce kabul edilseydi, satır düşürme kuralı yüzünden o satır hiç görünmez ve eksik ancak gerçek bir bildirim gittikten sonra fark edilirdi.
+- **Önizleme iki sürümlüdür ve kaydetmez.** Yetkili alıcının ve Kör Sipariş Modundaki alıcının göreceği metin yan yana durur; kural bir açıklama cümlesi değil, **görülen** bir şeydir. Önce kaydedip sonra görmek, hatalı bir metnin yürürlükte kaldığı bir aralık bırakır.
+- **Şablon değişikliği geçmişe işlemez.** İçerik kuyruğa yazılırken donar; sonradan değişen bir metin, gönderilmiş bir iletinin kaydını değiştirmez — aksi halde "biz size böyle yazmıştık" cümlesi doğrulanamaz olurdu. Değişikliğin kendisi denetim kaydına **metniyle birlikte** yazılır.
+- Gönderim yolunda şablonlar **önbellekten** okunur (60 sn). Kayıt iş verisiyle aynı işlemde yazıldığı için her satırda bir sorgu, sipariş işlemini uzatır ve kilitleri bekletir.
+
+### e-Belge üretim hattı
+
+Portal GİB'e **doğrudan bağlanmaz**: mali mühür ve GİB kanalı özel entegratörde kalır. Mührün özel anahtarını bir web uygulamasının sürecine koymak, o sürecin her açığını imza yetkisine çevirirdi — imzalanmış fatura ise geri alınamaz. Uç: `POST /e-documents/issue` (`EDOCUMENT_ISSUE`), sipariş ayrıntı ekranından tetiklenir.
+
+- **Belge siparişten üretilir.** Serbest kalemli fatura portalin işi değildir; aksi halde aynı fatura Logo'da ve portalde farklı tutarlarla var olabilir ve hangisinin doğru olduğu sorusu mutabakat masasına kalırdı. Yalnızca **onaylanmış** siparişten kesilir.
+- **Aritmetik belgenin içinde tutarlı olmalıdır.** Belge toplamları veritabanındaki tutarlardan kopyalanmaz, **yuvarlanmış satırlardan hesaplanır**; sonuç portalin bildiği toplamla bir kuruştan fazla ayrılırsa belge **hiç üretilmez**. İki farklı toplam taşıyan bir fatura, muhasebede saatlerce aranan bir farktır.
+- **KDV matrahları orana göre gruplanır.** Tek bir toplam KDV satırı, farklı oranlardan oluşan bir faturada hangi matrahın hangi oranla vergilendiğini gizler.
+- **Geçersiz belge üretilmez.** Belge numarası biçimi, VKN/TCKN ve satır aritmetiği üretimden **önce** denetlenir: reddi entegratörden öğrenmek, o noktada belge numarasının tükenmiş olması demektir ve tükenmiş numara defterde açıklanması gereken bir satır olarak durur.
+- **Kesme ile gönderme ayrıdır.** Belge kesilir, arşive yazılır ve `DRAFT` kalır; entegratöre iletim bakım görevinden yapılır. Kullanıcının isteğini entegratörün yanıt süresine bağlamak, zaman aşımında belgenin kesilip kesilmediğini bilinemez kılardı.
+- **Dosya kayıttan önce yazılır.** Kayıt önce yazılıp dosya yazımı başarısız olsaydı, veritabanı "belge var" derken arşiv boş kalırdı ve bu ancak aylar sonra, indirme denendiğinde fark edilirdi. Ters sırada en kötü ihtimalle sahipsiz bir dosya kalır — hiçbir kaydın işaret etmediği, kimseyi yanıltmayan bir dosya. `write` var olan dosyanın **üzerine yazmaz**.
+- **Gönderim ETTN üzerinden idempotenttir** ve geçici hatada belge `DRAFT` kalır; deneme hakkı **tükenmez**. Bildirimden farklı olarak burada vazgeçmek yanlıştır: kesilmiş bir fatura defterde durur, "denemekten vazgeçtik" diyebileceğimiz bir belge yoktur.
+- **Durum sorularak takip edilir, bildirim beklenerek değil.** Entegratörün geri bildirimi kaybolabilir; sorgu cevapsız kalmaz. Tanınmayan durum kodu **iyimser yorumlanmaz** — belge olduğu yerde kalır ve tekrar sorulur.
+- **Gönderim öncesi arşiv bütünlüğü doğrulanır:** dosyanın özeti kayıttakiyle uyuşmuyorsa belge gönderilmez. Değişmiş bir belgeyi imzalatmak, portalin kendi kaydından farklı bir faturayı hukuki asıl yapmaktır.
+- **e-İrsaliye tutar taşımaz.** İrsaliyeye tutar yazmak, malı teslim eden depo görevlisinin ve şoförün eline fiyat listesi vermektir. Kurallar `apps/api/src/einvoice/ubl-builder.spec.ts` ile kilitlenmiştir.
+
 ### Logo ERP entegrasyon katmanı
 
 Bulut API ile şirket içindeki Logo arasında yalnızca **mTLS ile korunan bir tünel** vardır ve **bağlantıyı her zaman bulut başlatır** — şirket içi ağda dışarıdan erişilebilen bir uç bulunmaz. Köprü yalnızca yanıt verir, buluta hiç çağrı yapmaz.
@@ -207,6 +234,8 @@ Bulut API ile şirket içindeki Logo arasında yalnızca **mTLS ile korunan bir 
 - Cari hareketler `logoFicheRef` ile eşleştirilir; belge numarası Logo'da dönem içinde tekrar edebilir.
 - Fiş türü eşlemesi (`account-sync.service.ts`) Tiger / Go Wings varsayılanlarına göre yazılmıştır ve **her kurulumda müşterinin fiş türleriyle doğrulanmalıdır**.
 - Durum ekranı: `/panel/entegrasyon` (yalnızca `INTEGRATION_MANAGE`). Kanal açma/kapama, elle tur, tam senkron ve ölü olayları yeniden kuyruğa alma buradan yapılır.
+- **Köprüde kurulum doğrulaması vardır:** `GET /bridge/v1/diagnostics` hangi tablonun eksik, hangi kolonun bulunamadığını ve dönemin açık olup olmadığını insan okunur biçimde söyler. Sahadaki en sık sorun tablo/alan adlarıdır ve doğrulama olmadan bu hata köprü açıldıktan sonra, ilk senkron turunda anlamsız bir SQL hatası olarak görünür. Ayrıntı: `apps/logo-bridge/README.md`.
+- Köprü kendini portalin yüküne karşı da korur: eşzamanlılık sınırı aşıldığında **503 + `Retry-After`** döner (geçici hata — sipariş ölü işaretlenmez), okuma sorgularının zaman aşımı vardır ve istek gövdesi sınırlıdır.
 
 Bu modülün hiçbir görünümü Kör Sipariş Modundaki kullanıcıya ulaşmaz: ilgili uç noktalar `BALANCE_VIEW` / `STATEMENT_VIEW` / `AGING_REPORT_VIEW` yetkisi ister ve alt yetkili rolünde bu yetkiler yoktur. Yanıt süzgeci burada ikinci savunma hattıdır.
 
@@ -224,16 +253,19 @@ Bu modülün hiçbir görünümü Kör Sipariş Modundaki kullanıcıya ulaşmaz
 
 ## iOS uygulaması
 
-Kaynaklar `apps/ios/ToptanPortal/` altındadır ve bir Xcode uygulama hedefine eklenir (iOS 17+, Swift 5.9+).
+Kaynaklar `apps/ios/ToptanPortal/` altındadır (iOS 17+, Swift 5.9+).
 
-`Info.plist` gereksinimleri:
-
-```xml
-<key>TOPTANPORTAL_API_URL</key>
-<string>https://api.toptanportal.com</string>
-<key>NSFaceIDUsageDescription</key>
-<string>Kayıtlı oturumunuza güvenli şekilde erişmek için kullanılır.</string>
+```bash
+brew install xcodegen
+cd apps/ios && xcodegen generate
+open ToptanPortal.xcodeproj
 ```
+
+**`.xcodeproj` depoya konmaz, `project.yml` tanımından üretilir.** `project.pbxproj` makine tarafından üretilen, tek satırlı kimliklerden oluşan ve iki kişi aynı anda dosya eklediğinde **çatışan** bir dosyadır; çakışması elle çözülemez ve çözmeye çalışan kişi genellikle bir tarafı seçer — diğerinin dosyaları projeden sessizce düşer, derleme geçer, ekran kaybolur. Kaynak listesi de elle tutulmaz (`sources` bir dizini işaret eder): yeni bir Swift dosyası eklemek için proje dosyasına dokunmak gerekmez.
+
+`TOPTANPORTAL_API_URL` bir **derleme ayarından** gelir (Debug: `localhost:3001`, Release: üretim adresi). Adresi kaynak koduna gömmek, test yapısı ile üretim yapısını ayırt edilemez kılar; yanlış yapıyı mağazaya gönderdiğinizde ise bunu kullanıcılar bildirir.
+
+**Testler** `apps/ios/ToptanPortalTests/` altındadır ve her itmede macOS koşucusunda çalışır (`.github/workflows/ios.yml`). Kapsam bilinçli olarak dardır: kuyruğun **disk biçimi** ve modellerin **kör mod sözleşmesi**. Kuyruk dosyasının biçimi sessizce bozulursa çözümleme boş dizi döner ve bekleyen tüm siparişler kaybolur — uygulama hatasız açılır, kuyruk boş görünür. Bu testler o sessiz kaybı gürültülü hale getirir.
 
 **Uygulanmış ekranlar:** rutin sipariş şablonları (10 saniye akışı), barkodla hızlı sepete ekleme, sepet ve sipariş gönderimi, saha ekranı (bayi listesi + tahsilat + ziyaret notu).
 
@@ -251,14 +283,23 @@ Tasarım ilkeleri: birincil eylemler ekranın alt şeridinde sabit durur (bir el
 
 ## Sıradaki modüller
 
-1. **e-Belge üretim hattı** — entegratör bağlantısı, UBL-TR üretimi, GİB durum takibi (arşiv ve sunum tarafı hazır)
-2. **On-prem köprünün saha sertleştirmesi** — iskelet hazır (`apps/logo-bridge`); Logo Object Service çağrıları müşteri kurulumunda doğrulanacak
-3. **Xcode proje hedefi** — iOS kaynakları hazır; `.xcodeproj` oluşturulup CI'a bağlanacak
-4. **Bildirim şablon yönetimi** — metinler koda gömülüdür; kiracı bazında düzenleme ekranı sonraki adımdır
+1. **e-İrsaliye sevk akışı** — belge üretimi hazır (`buildDespatchAdviceXml`); irsaliyeyi doğuran sevkiyat kaydı ve araç/şoför bilgisi portalde henüz tutulmuyor
+2. **e-Arşiv raporu** — GİB'e günlük e-Arşiv raporu iletimi; entegratör bağlantısı hazır, rapor üretimi ayrı bir iştir
+3. **Kampanya (ticari ileti) kanalı** — İYS izni ile çalışan ayrı bir boru. İşlemsel bildirimle **aynı kuyruğa konmayacak**; ikisini birleştirmek, izinsiz gönderimi bir yapılandırma hatası kadar yakın hale getirir
+4. **Veritabanı gerektiren tümleşik testler** — CI şu an yalnızca birim testlerini koşar; PostgreSQL'li bir iş akışı ayrıca kurulacak
 
-Tamamlananlar: stok rezervasyonu ve sipariş motoru, matris fiyat ve kademeli iskonto, cari hesap / ekstre / yaşlandırma, tahsilat kaydı, sipariş risk kalkanı, Logo entegrasyonunun bulut tarafı ve köprü iskeleti, 3D Secure sanal POS, DBS, e-Belge arşivi, saha yönetimi, toplu sipariş içe aktarımı, kullanıcı yönetimi, denetim kaydı sorgulama, bildirim kanalı ve iOS uygulamasının çekirdek akışları.
+Tamamlananlar: stok rezervasyonu ve sipariş motoru, matris fiyat ve kademeli iskonto, cari hesap / ekstre / yaşlandırma, tahsilat kaydı, sipariş risk kalkanı, Logo entegrasyonunun bulut tarafı ve köprü (kurulum tanılaması dahil), 3D Secure sanal POS, DBS, e-Belge arşivi **ve üretim hattı**, saha yönetimi, toplu sipariş içe aktarımı, kullanıcı yönetimi, denetim kaydı sorgulama, bildirim kanalı **ve kiracı şablonları**, iOS uygulamasının çekirdek akışları ve **Xcode proje tanımı + CI**.
 
 Temel altyapı (`OutboxEvent`, `IdempotencyKey`, denetim zinciri) bu modüller için şemada hazırdır.
+
+## Sürekli tümleştirme
+
+| İş akışı | Kapsam |
+|---|---|
+| `.github/workflows/ci.yml` | API, web ve sözleşmeler (lint + test + derleme) · Logo köprüsü (`dotnet test`) |
+| `.github/workflows/ios.yml` | macOS koşucusunda XcodeGen ile proje üretimi, derleme ve simülatör testleri |
+
+CI **çalışan bir veritabanı istemez**: koşulan testler saf mantığı doğrular (fiyatlama, kör mod süzgeci, UBL üretimi, denetim zinciri, şablon motoru). Altyapı yüzünden kırmızı yanan bir CI, bir süre sonra hiç okunmaz.
 
 ---
 
@@ -272,3 +313,5 @@ Temel altyapı (`OutboxEvent`, `IdempotencyKey`, denetim zinciri) bu modüller i
 | `pnpm --filter @toptanportal/db verify-audit` | Denetim zinciri bütünlük kontrolü |
 | `pnpm --filter @toptanportal/api test` | API testleri |
 | `pnpm build` | Tüm paketleri derle |
+| `cd apps/logo-bridge && dotnet test` | Logo köprüsü testleri |
+| `cd apps/ios && xcodegen generate` | Xcode projesini üret |
