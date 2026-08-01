@@ -92,6 +92,12 @@ async function main(): Promise<void> {
       logoCariCode: '120.01.0001',
       title: 'Mavi Kapı Kahve ve Kahvaltı Ltd. Şti.',
       shortName: 'Mavi Kapı Kahve',
+      /* VKN ve vergi dairesi GELISTIRME VERISINDE DE bulunur: e-Belge hatti
+         bunlar olmadan calismaz ve "bende fatura kesilmiyor" sorusunun cevabi
+         gelistirme ortaminda hic gorulmezdi. Numaralar ornektir. */
+      taxNumber: '2960547821',
+      taxOffice: 'Kadıköy',
+      address: 'Bağdat Cad. No:112',
       city: 'İstanbul',
       district: 'Kadıköy',
       creditLimit: 250000,
@@ -103,6 +109,9 @@ async function main(): Promise<void> {
       logoCariCode: '120.01.0002',
       title: 'Sahil Butik Otel İşletmeciliği A.Ş.',
       shortName: 'Sahil Butik Otel',
+      taxNumber: '4180376925',
+      taxOffice: 'Çeşme',
+      address: 'Sakarya Mah. Liman Sok. No:7',
       city: 'İzmir',
       district: 'Çeşme',
       creditLimit: 750000,
@@ -118,12 +127,22 @@ async function main(): Promise<void> {
       where: {
         tenantId_logoCariCode: { tenantId: tenant.id, logoCariCode: spec.logoCariCode },
       },
-      update: {},
+      /* Var olan kayit da GUNCELLENIR: `update: {}` birakilsaydi, daha once
+         tohumlanmis bir veritabani VKN'siz kalir ve o kurulumda fatura
+         kesilemezdi - tohum betigini yeniden calistirmak da bunu duzeltmezdi. */
+      update: {
+        taxNumber: spec.taxNumber,
+        taxOffice: spec.taxOffice,
+        address: spec.address,
+      },
       create: {
         tenantId: tenant.id,
         logoCariCode: spec.logoCariCode,
         title: spec.title,
         shortName: spec.shortName,
+        taxNumber: spec.taxNumber,
+        taxOffice: spec.taxOffice,
+        address: spec.address,
         city: spec.city,
         district: spec.district,
         creditLimit: spec.creditLimit,

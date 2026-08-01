@@ -57,3 +57,10 @@ apps/ios/*.xcresult/
 # .NET
 apps/logo-bridge/**/bin/
 apps/logo-bridge/**/obj/
+
+# e-Belge arsivi
+#
+# Kesilen belgeler TICARI BELGEDIR: cari unvani, vergi numarasi ve tutar
+# tasirlar. Gelistirme ortaminda uretilmis olsalar bile depoya girmeleri,
+# bu verileri deponun butun gecmisine kalici olarak yazmak demektir.
+apps/api/storage/
