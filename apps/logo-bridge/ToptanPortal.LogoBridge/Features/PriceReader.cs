@@ -55,6 +55,10 @@ public sealed class PriceReader
 
         await using var connection = await _db.OpenAsync(ct);
         await using var command = new SqlCommand(sql, connection);
+        /* Zaman asimi olmayan bir sorgu, Logo tarafinda kilitlenen tek bir
+           tabloda koprunun tum baglanti havuzunu tuketir ve saglik ucu dahil
+           hicbir istek yanit alamaz. */
+        command.CommandTimeout = _options.CommandTimeoutSeconds;
         command.Parameters.Add("@limit", System.Data.SqlDbType.Int).Value = boyut;
         command.Parameters.Add("@cursor", System.Data.SqlDbType.BigInt).Value = son;
 

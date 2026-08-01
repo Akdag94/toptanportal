@@ -44,7 +44,7 @@ public sealed class OrderWriter
     {
         await using var connection = await _db.OpenAsync(ct);
 
-        var mevcut = await FindExistingAsync(connection, order.PortalOrderId, ct);
+        var mevcut = await FindExistingAsync(connection, order.PortalOrderId, _options.CommandTimeoutSeconds, ct);
 
         if (mevcut is not null)
         {
@@ -80,6 +80,7 @@ public sealed class OrderWriter
     private static async Task<BridgeOrderResult?> FindExistingAsync(
         SqlConnection connection,
         Guid portalOrderId,
+        int commandTimeout,
         CancellationToken ct)
     {
         const string sql = """
@@ -89,6 +90,7 @@ public sealed class OrderWriter
             """;
 
         await using var command = new SqlCommand(sql, connection);
+        command.CommandTimeout = commandTimeout;
         command.Parameters.Add("@id", System.Data.SqlDbType.UniqueIdentifier).Value = portalOrderId;
 
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -166,13 +168,14 @@ public sealed class OrderWriter
         return null;
     }
 
-    private static async Task<bool> ExistsAsync(
+    private async Task<bool> ExistsAsync(
         SqlConnection connection,
         string sql,
         string code,
         CancellationToken ct)
     {
         await using var command = new SqlCommand(sql, connection);
+        command.CommandTimeout = _options.CommandTimeoutSeconds;
         command.Parameters.Add("@code", System.Data.SqlDbType.NVarChar, 64).Value = code;
         return await command.ExecuteScalarAsync(ct) is not null;
     }
@@ -198,6 +201,7 @@ public sealed class OrderWriter
         try
         {
             await using var command = new SqlCommand(sql, connection);
+            command.CommandTimeout = _options.CommandTimeoutSeconds;
             command.Parameters.Add("@id", System.Data.SqlDbType.UniqueIdentifier).Value = order.PortalOrderId;
             command.Parameters.Add("@portalNumber", System.Data.SqlDbType.NVarChar, 24).Value = order.OrderNumber;
             command.Parameters.Add("@logoNumber", System.Data.SqlDbType.NVarChar, 32).Value = logoOrderNumber;

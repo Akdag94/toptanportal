@@ -17,6 +17,23 @@ public sealed record BridgeHealth(
     string CheckedAt,
     string? Message);
 
+/// <summary>
+/// Kurulum tanilamasinin tek bulgusu.
+///
+/// `Status` uc degerlidir ve ucu de gereklidir: FAIL kurulumu durdurur, WARN
+/// calisan ama eksik bir kurulumu isaret eder (ornek: siparis yazimi kapali),
+/// PASS ise "bu denetim yapildi ve gecti" der. Yalnizca hatalari dondurmek,
+/// denetimin CALISTIGINI dogrulanamaz kilardi.
+/// </summary>
+public sealed record DiagnosticFinding(string Target, string Status, string Message);
+
+public sealed record BridgeDiagnostics(
+    string Status,
+    int FailureCount,
+    int WarningCount,
+    IReadOnlyList<DiagnosticFinding> Findings,
+    string CheckedAt);
+
 public sealed record StockDeltaItem(
     string LogoCode,
     string WarehouseCode,

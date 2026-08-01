@@ -11,29 +11,51 @@ public static class Endpoints
     {
         var grup = app.MapGroup("/bridge/v1");
 
-        /* SAGLIK: kopru ayakta olmasi ile Logo'nun ayakta olmasi AYRI
-           raporlanir. Ikisini tek bayrakta birlestiren bir yanit, gecici bir
-           Logo bakiminda siparislerin olu isaretlenmesine yol acar. */
+        /* SAGLIK: koprunun ayakta olmasi, Logo VERITABANININ ayakta olmasi ve
+           Logo SERVISININ ayakta olmasi UC AYRI seydir ve ayri raporlanir.
+           Ucunu tek bayrakta birlestiren bir yanit, gecici bir Logo bakiminda
+           siparislerin olu isaretlenmesine yol acar; okumanin calisip yazmanin
+           durdugu durumu ise hic gostermez. */
         grup.MapGet("/health", async (
             LogoDatabase db,
+            ILogoOrderSink sink,
             BridgeOptions options,
             CancellationToken ct) =>
         {
             var veritabani = await db.IsReachableAsync(ct);
+            var servis = await sink.ProbeAsync(ct);
             var surum = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0";
 
-            var durum = veritabani ? "HEALTHY" : "DEGRADED";
+            /* Veritabani dustuyse kopru islevsizdir; servis dustuyse yalnizca
+               YAZMA durur, okuma akislari calismaya devam eder. Ikisi ayni
+               agirlikta degildir. */
+            var durum = veritabani ? (servis ? "HEALTHY" : "DEGRADED") : "DOWN";
+
+            var mesaj = !veritabani
+                ? "Logo veritabanına erişilemiyor."
+                : servis
+                    ? null
+                    : options.CanWriteOrders
+                        ? "Logo Object Service'e ulaşılamıyor; sipariş yazımı duraklamış durumda."
+                        : "Sipariş yazımı yapılandırılmamış; yalnızca okuma akışları çalışıyor.";
 
             return Results.Ok(new BridgeHealth(
                 Status: durum,
                 Version: surum,
-                LogoServiceUp: veritabani,
+                LogoServiceUp: servis,
                 DatabaseUp: veritabani,
                 CompanyNumber: options.FirmNumber,
                 PeriodNumber: options.PeriodNumber,
                 CheckedAt: DateTime.UtcNow.ToString("O"),
-                Message: veritabani ? null : "Logo veritabanına erişilemiyor."));
+                Message: mesaj));
         });
+
+        /* TANILAMA: kurulumda calistirilir; tablo, kolon ve donem eksiklerini
+           insan okuyabilir bicimde verir. Saglik ucundan ayridir cunku her
+           tablo icin ayri sorgu calistirir ve her bes dakikada bir yapilacak
+           bir is degildir. */
+        grup.MapGet("/diagnostics", (InstallationDiagnostics diagnostics, CancellationToken ct) =>
+            diagnostics.RunAsync(ct));
 
         grup.MapGet("/stock", (StockReader reader, string? cursor, int? limit, CancellationToken ct) =>
             reader.ReadAsync(cursor, limit, ct));
