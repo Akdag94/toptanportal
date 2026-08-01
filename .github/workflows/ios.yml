@@ -22,7 +22,14 @@ on:
 jobs:
   build-test:
     # Xcode yalnizca macOS'ta calisir; baska bir kosucu secenegi yoktur.
-    runs-on: macos-14
+    #
+    # Kosucu imaji XCODEGEN'IN URETTIGI PROJE BICIMINI OKUYABILECEK kadar yeni
+    # olmalidir. `brew install xcodegen` her zaman en guncel surumu kurar ve
+    # uretilen bicim geriye uyumlu degildir; macos-14 (Xcode 15) bu yuzden
+    # "future Xcode project file format" hatasi verdi. Imaj etiketi acikca
+    # yazilir - `macos-latest` sessizce kayar ve kayma bir gun projeyi
+    # okunamaz hale getirir.
+    runs-on: macos-15
 
     steps:
       - uses: actions/checkout@v4
