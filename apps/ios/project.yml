@@ -22,6 +22,14 @@ name: ToptanPortal
 
 options:
   bundleIdPrefix: com.toptanportal
+  # Proje dosyasi bicimi ACIKCA sabitlenir.
+  #
+  # XcodeGen'in varsayilani, kurulu surumune gore ilerler ve uretilen proje
+  # "gelecekteki bir bicim" diye daha eski bir Xcode tarafindan HIC ACILMAZ -
+  # hata derleme hatasi gibi gorunmez, projeyi okunamaz kilar. Bicimi burada
+  # sabitlemek, CI kosucusundaki Xcode ile gelistiricinin Xcode'unun ayni
+  # dosyayi okumasini garanti eder. 56, Xcode 14 ve sonrasinin okudugu bicimdir.
+  objectVersion: 56
   deploymentTarget:
     # SwiftUI'nin @Observable makrosu ve yeni gozlem modeli iOS 17 ister;
     # kod bunu kullanir (bkz. AuthStore).

@@ -36,6 +36,31 @@ jobs:
         working-directory: apps/ios
         run: xcodegen generate
 
+      # Cihaz adi ELLE YAZILMAZ. "iPhone 15" gibi sabit bir ad, kosucu imaji
+      # yenilendiginde o simulator kaldirildigi icin is akisini kirar - ve
+      # hata, kodla hicbir ilgisi olmayan bir yerden gelir. Mevcut olanlardan
+      # en yenisi secilir.
+      - name: Simülatör seç
+        id: simulator
+        run: |
+          UDID=$(xcrun simctl list devices available --json | python3 -c '
+import json, sys
+
+cihazlar = json.load(sys.stdin)["devices"]
+uygun = [
+    cihaz
+    for calisma, liste in cihazlar.items() if "iOS" in calisma
+    for cihaz in liste if cihaz.get("isAvailable") and "iPhone" in cihaz["name"]
+]
+
+if not uygun:
+    sys.exit("Kullanılabilir iPhone simülatörü bulunamadı.")
+
+print(uygun[-1]["udid"])
+')
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          xcrun simctl list devices available | grep "$UDID"
+
       - name: Derle ve test et
         working-directory: apps/ios
         run: |
@@ -43,7 +68,7 @@ jobs:
           xcodebuild test \
             -project ToptanPortal.xcodeproj \
             -scheme ToptanPortal \
-            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify

@@ -7,8 +7,13 @@ namespace ToptanPortal.LogoBridge.Configuration;
 /// Kopru sirket ici agda, gozetimsiz calisir. Yanlis yapilandirmayla ayakta
 /// kalmasi, hic ayaga kalkmamasindan tehlikelidir: yanlis firma numarasiyla
 /// acilan bir kopru, baska bir sirketin stok verisini portale tasir.
+///
+/// `record` OLMASININ SEBEBI TESTLERDIR: bir alani degistirip geri kalani
+/// koruyan `with` ifadesi, her testin tum alanlari yeniden yazmasini onler.
+/// Yalnizca veri tasiyan, degismez bir yapilandirma nesnesi icin dogru sekil
+/// zaten budur.
 /// </summary>
-public sealed class BridgeOptions
+public sealed record BridgeOptions
 {
     public const string SectionName = "Bridge";
 
