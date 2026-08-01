@@ -88,15 +88,31 @@ public sealed class BridgeOptionsTests
         Assert.Empty(options.Validate());
     }
 
-    [Fact]
-    public void Bozuk_object_service_adresi_reddedilir()
+    [Theory]
+    // Sema unutulmus adres: `Uri.TryCreate` bunu GECERLI sayar ve
+    // "logo-sunucu" semali bir adres olarak ayristirir. Sema denetimi
+    // olmasaydi hata acilista degil, ilk siparis gonderiminde ortaya cikardi.
+    [InlineData("logo-sunucu:8080/orders")]
+    [InlineData("/orders")]
+    [InlineData("ftp://logo-sunucu/orders")]
+    public void Bozuk_object_service_adresi_reddedilir(string adres)
     {
         // Yazim hatasi tasiyan bir adres, ilk siparis gelene kadar sessiz kalir
         // ve o siparis "Logo kabul etmedi" diye olu isaretlenir - oysa Logo o
         // istegi hic gormemistir.
-        var options = Gecerli() with { ObjectServiceUrl = "logo-sunucu:8080/orders" };
+        var options = Gecerli() with { ObjectServiceUrl = adres };
 
         Assert.Contains(options.Validate(), h => h.Contains("ObjectServiceUrl"));
+    }
+
+    [Theory]
+    [InlineData("http://logo-sunucu:8080/orders")]
+    [InlineData("https://logo-sunucu/api/orders")]
+    public void Gecerli_object_service_adresi_kabul_edilir(string adres)
+    {
+        var options = Gecerli() with { ObjectServiceUrl = adres };
+
+        Assert.Empty(options.Validate());
     }
 
     [Fact]

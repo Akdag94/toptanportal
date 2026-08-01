@@ -40,24 +40,15 @@ jobs:
       # yenilendiginde o simulator kaldirildigi icin is akisini kirar - ve
       # hata, kodla hicbir ilgisi olmayan bir yerden gelir. Mevcut olanlardan
       # en yenisi secilir.
+      # Betik TEK SATIRDIR. YAML blok metninde, blok girintisinden daha az
+      # girintili bir satir blogu SONLANDIRIR; Python'un sutun 0'dan baslayan
+      # govdesi bu yuzden is akisi dosyasini gecersiz kilar (ve hata, adim
+      # calismadan once "workflow file issue" olarak doner). Python'a uniform
+      # girinti de verilemez - ust seviye kodda girinti hatadir.
       - name: Simülatör seç
         id: simulator
         run: |
-          UDID=$(xcrun simctl list devices available --json | python3 -c '
-import json, sys
-
-cihazlar = json.load(sys.stdin)["devices"]
-uygun = [
-    cihaz
-    for calisma, liste in cihazlar.items() if "iOS" in calisma
-    for cihaz in liste if cihaz.get("isAvailable") and "iPhone" in cihaz["name"]
-]
-
-if not uygun:
-    sys.exit("Kullanılabilir iPhone simülatörü bulunamadı.")
-
-print(uygun[-1]["udid"])
-')
+          UDID=$(xcrun simctl list devices available --json | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k,v in d.items() if 'iOS' in k for x in v if x.get('isAvailable') and 'iPhone' in x['name']]; sys.exit('Kullanilabilir iPhone simulatoru yok.') if not c else print(c[-1]['udid'])")
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
           xcrun simctl list devices available | grep "$UDID"
 

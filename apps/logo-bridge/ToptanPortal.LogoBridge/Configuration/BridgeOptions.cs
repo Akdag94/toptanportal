@@ -138,13 +138,27 @@ public sealed record BridgeOptions
             yield return "Bridge:MaxConcurrentRequests 1-256 aralığında olmalıdır.";
         }
 
-        /* Adres tanimliysa GECERLI olmalidir. Yazim hatasi tasiyan bir adres,
-           ilk siparis gelene kadar sessiz kalir ve o siparis "Logo kabul
-           etmedi" diye olu isaretlenir - oysa Logo o istegi hic gormemistir. */
-        if (!string.IsNullOrWhiteSpace(ObjectServiceUrl)
-            && !Uri.TryCreate(ObjectServiceUrl, UriKind.Absolute, out _))
+        /* Adres tanimliysa GECERLI BIR HTTP ADRESI olmalidir. Yazim hatasi
+           tasiyan bir adres, ilk siparis gelene kadar sessiz kalir ve o siparis
+           "Logo kabul etmedi" diye olu isaretlenir - oysa Logo o istegi hic
+           gormemistir.
+
+           SEMA DENETIMI SART: `Uri.TryCreate` tek basina yetmez, cunku
+           "logo-sunucu:8080/orders" gibi sema unutulmus bir adresi GECERLI
+           sayar - onu "logo-sunucu" semali bir adres olarak ayristirir. Boyle
+           bir adres dogrulamadan gecer, sonra `HttpClient` tarafindan
+           reddedilir; yani hata acilista degil, ilk siparis gonderiminde
+           ortaya cikar. */
+        if (!string.IsNullOrWhiteSpace(ObjectServiceUrl))
         {
-            yield return "Bridge:ObjectServiceUrl geçerli bir mutlak adres olmalıdır.";
+            var gecerli = Uri.TryCreate(ObjectServiceUrl, UriKind.Absolute, out var adres)
+                          && (adres.Scheme == Uri.UriSchemeHttp || adres.Scheme == Uri.UriSchemeHttps);
+
+            if (!gecerli)
+            {
+                yield return
+                    "Bridge:ObjectServiceUrl http:// veya https:// ile başlayan mutlak bir adres olmalıdır.";
+            }
         }
     }
 
