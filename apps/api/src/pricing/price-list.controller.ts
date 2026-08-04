@@ -1,37 +1,46 @@
 /**
- * ToptanPortal API - Fiyat Listeleri (salt okunur)
+ * ToptanPortal API - Fiyat Listeleri
  *
- * Fiyatlar Logo'dan senkronlanir; portal onlari DEGISTIRMEZ. Bu denetleyicide
- * yazma ucu bilincli olarak yoktur: fiyati portalden degistirmek, iki sistem
- * arasinda hangisinin dogru oldugu belirsiz bir alan yaratir ve bir sonraki
- * senkron o degisikligi sessizce geri alir - kullanici da neden geri
- * alindigini asla anlamaz.
+ * Liste TANIMI portalde acilmaz: hangi bayinin hangi listeden alacagi ticari
+ * bir karardir ve Logo'da verilir. Liste SATIRI - yani fiyatin kendisi -
+ * degistirilebilir ve degisiklik Logo'ya yazilir.
  *
- * Bu ekranin isi FIYATI DEGISTIRMEK degil, "bu bayi bu urunu kacdan aliyor"
- * sorusunu cevaplamaktir.
+ * Eski gerekce ("portalden degistirilen fiyati senkron geri alir") dogruydu ve
+ * hala gecerlidir; cozum fiyati portalde tutmak degil, degisikligi Logo'ya
+ * TASIMAKTIR. Senkron o degeri geri okudugunda iki taraf zaten aynidir.
+ *
+ * OKUMA ile YAZMA farkli yetki ister: `PRICE_LIST_MANAGE` listeyi gormeyi
+ * acar, `PRICE_CHANGE` kesilecek faturayi degistirir.
  */
 
-import { Controller, Get, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Prisma } from '@toptanportal/db';
 import {
   Permission,
+  priceChangeSchema,
   priceListItemQuerySchema,
+  type PriceChangeRequest,
   type PriceListItemPage,
   type PriceListItemQuery,
+  type PriceListItemView,
   type PriceListView,
 } from '@toptanportal/contracts';
 
-import { CurrentUser, RequirePermissions } from '../common/decorators';
+import { CurrentUser, RateLimit, RequirePermissions } from '../common/decorators';
 import { zodBody } from '../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { AuthenticatedPrincipal } from '../common/context/request-context';
+import { PriceChangeService } from './price-change.service';
 
 @ApiTags('Fiyat Listeleri')
 @Controller('price-lists')
 @RequirePermissions(Permission.PRICE_LIST_MANAGE)
 export class PriceListController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly priceChange: PriceChangeService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Fiyat listeleri' })
@@ -114,15 +123,41 @@ export class PriceListController {
         productId: satir.productId,
         productCode: satir.product.logoItemCode,
         productName: satir.product.name,
+        unitId: satir.unitId,
         unitCode: satir.unit?.code ?? null,
         price: satir.price.toNumber(),
         minQuantity: satir.minQuantity.toNumber(),
         validFrom: satir.validFrom?.toISOString() ?? null,
         validTo: satir.validTo?.toISOString() ?? null,
+        logoWriteState: satir.logoWriteState,
+        logoWriteError: satir.logoWriteError,
         lastSyncedAt: satir.logoSyncedAt?.toISOString() ?? null,
       })),
       totalCount: toplam,
       hasMore: query.offset + satirlar.length < toplam,
     };
+  }
+
+  /**
+   * Tek bir fiyati degistirir ve Logo'ya yazilmak uzere kuyruga alir.
+   *
+   * TOPLU degisiklik ucu bilincli olarak yoktur: bir ekrandan yuzlerce fiyati
+   * birden degistirmek, yanlis bir yuzdeyi tum katalogda uygulamayi bir tiklik
+   * hale getirir ve geri alinmasi Logo'da elle duzeltme gerektirir. Toplu is
+   * gerektiginde dogru arac Logo'nun kendi guncelleme ekranidir; oradan yapilan
+   * degisiklik zaten senkronla portale gelir.
+   *
+   * Hiz siniri bu yuzden dardir: her cagri kesilecek bir faturayi degistirir.
+   */
+  @Post('items')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.PRICE_CHANGE)
+  @RateLimit({ limit: 120, windowSeconds: 3600, scope: 'USER' })
+  @ApiOperation({ summary: 'Fiyat değiştir (Logo’ya yazılır)' })
+  change(
+    @CurrentUser() principal: AuthenticatedPrincipal,
+    @Body(zodBody(priceChangeSchema)) body: PriceChangeRequest,
+  ): Promise<PriceListItemView> {
+    return this.priceChange.change(principal, body);
   }
 }

@@ -81,15 +81,16 @@ export const barcodeLookupSchema = z.object({
 export type BarcodeLookupRequest = z.infer<typeof barcodeLookupSchema>;
 
 // ---------------------------------------------------------------------------
-// Fiyat listeleri (salt okunur)
+// Fiyat listeleri
 // ---------------------------------------------------------------------------
 
 /**
- * Fiyat listeleri Logo'dan senkronlanir; portal onlari DEGISTIRMEZ.
+ * Liste TANIMI Logo'dan gelir ve portalde acilmaz: hangi bayinin hangi
+ * listeden alacagi ticari bir karardir ve Logo'da verilir.
  *
- * Bu yuzden sozlesmede yazma islemi yoktur: fiyati portalden degistirmek, iki
- * sistem arasinda hangisinin dogru oldugu belirsiz bir alan yaratir ve bir
- * sonraki senkron o degisikligi sessizce geri alir.
+ * Liste SATIRI (fiyat) ise portalden degistirilebilir ve degisiklik Logo'ya
+ * yazilir - bkz. `catalog-write.schema.ts`. Fiyati yalnizca portalde tutmak,
+ * faturayi kesen sistemin baska bir fiyat bilmesi demektir.
  */
 export const priceListViewSchema = z.object({
   id: z.string().uuid(),
@@ -112,11 +113,20 @@ export const priceListItemViewSchema = z.object({
   productId: z.string().uuid(),
   productCode: z.string(),
   productName: z.string(),
+  unitId: z.string().uuid().nullable(),
   unitCode: z.string().nullable(),
   price: z.number(),
   minQuantity: z.number(),
   validFrom: z.string().nullable(),
   validTo: z.string().nullable(),
+  /**
+   * Portalden degistirilen fiyatin Logo'ya ulasip ulasmadigi.
+   *
+   * Ekranda gorunmesi sart: yeni fiyati gorup isinin bittigini sanan kullanici,
+   * yazim kuyrukta beklerken ya da reddedilmisken yanlis bilgilendirilmis olur.
+   */
+  logoWriteState: z.enum(['SYNCED', 'PENDING', 'FAILED']),
+  logoWriteError: z.string().nullable(),
   lastSyncedAt: z.string().nullable(),
 });
 
