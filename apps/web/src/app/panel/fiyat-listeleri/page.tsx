@@ -25,7 +25,32 @@ import { priceListApi } from '../../../lib/api-client';
 import { miktar, para, tarihSaat } from '../../../lib/bicim';
 import { useSession } from '../../../lib/session-context';
 
+/**
+ * Yazim durumu rozeti.
+ *
+ * `SYNCED` icin hicbir sey cizilmez: "her sey yolunda" bilgisi her satirda
+ * tekrarlandiginda gorsel gurultu olur ve asil bakilmasi gereken iki durum
+ * arasinda kaybolur.
+ */
+function YazimRozeti({ satir }: { satir: PriceListItemView }) {
+  if (satir.logoWriteState === 'SYNCED') return null;
+
+  return (
+    <span
+      className={`rozet ${
+        satir.logoWriteState === 'PENDING' ? 'yazim-bekliyor' : 'yazim-reddedildi'
+      }`}
+      title={satir.logoWriteError ?? undefined}
+    >
+      {LOGO_WRITE_STATE_LABELS[satir.logoWriteState]}
+    </span>
+  );
+}
+
 export default function FiyatListeleriSayfasi() {
+  const { user } = useSession();
+  const fiyatDegistirebilir = (user?.permissions ?? []).includes('price:change');
+
   const [listeler, setListeler] = useState<PriceListView[]>([]);
   const [secilen, setSecilen] = useState<PriceListView | null>(null);
   const [satirlar, setSatirlar] = useState<PriceListItemView[]>([]);
@@ -34,6 +59,12 @@ export default function FiyatListeleriSayfasi() {
 
   const [arama, setArama] = useState('');
   const [uygulananArama, setUygulananArama] = useState('');
+
+  /** Duzenlenen satirin kimligi. Ayni anda tek satir duzenlenir. */
+  const [duzenlenen, setDuzenlenen] = useState<PriceListItemView | null>(null);
+  const [yeniFiyat, setYeniFiyat] = useState('');
+  const [gerekce, setGerekce] = useState('');
+  const [kaydediliyor, setKaydediliyor] = useState(false);
 
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState<string | null>(null);
@@ -82,14 +113,61 @@ export default function FiyatListeleriSayfasi() {
     void satirlariYukle(0);
   }, [satirlariYukle]);
 
+  const duzenlemeyiBaslat = (satir: PriceListItemView) => {
+    setDuzenlenen(satir);
+    /* Alan MEVCUT fiyatla dolu gelir. Bos bir alan, kullanicinin eski fiyati
+       hatirlamasini ya da satiri kapatip yeniden bakmasini gerektirir. */
+    setYeniFiyat(String(satir.price));
+    setGerekce('');
+    setHata(null);
+  };
+
+  const fiyatiKaydet = async () => {
+    if (!duzenlenen || !secilen) return;
+
+    const deger = Number(yeniFiyat.replace(',', '.'));
+
+    if (!Number.isFinite(deger) || deger < 0) {
+      setHata('Geçerli bir fiyat giriniz.');
+      return;
+    }
+
+    setKaydediliyor(true);
+    setHata(null);
+
+    try {
+      const guncel = await priceListApi.change({
+        priceListId: secilen.id,
+        productId: duzenlenen.productId,
+        unitId: duzenlenen.unitId,
+        minQuantity: duzenlenen.minQuantity,
+        price: deger,
+        reason: gerekce.trim(),
+      });
+
+      /* Satir YERINDE guncellenir, liste bastan cekilmez: kullanicinin
+         kaydirdigi yer korunur ve degisen satirin yeni durumu (Logo'ya
+         yazılıyor) hemen gorunur. */
+      setSatirlar((oncekiler) =>
+        oncekiler.map((satir) => (satir.id === guncel.id ? guncel : satir)),
+      );
+      setDuzenlenen(null);
+    } catch (error) {
+      setHata(error instanceof Error ? error.message : 'Fiyat değiştirilemedi.');
+    } finally {
+      setKaydediliyor(false);
+    }
+  };
+
   return (
     <div>
       <div className="sayfa-baslik">
         <div>
           <h2>Fiyat Listeleri</h2>
           <p>
-            Fiyatlar Logo&apos;dan senkronlanır ve portalden değiştirilemez. Değişiklik Logo
-            tarafında yapılır, bir sonraki senkronda buraya yansır.
+            {fiyatDegistirebilir
+              ? 'Buradan değiştirilen fiyat Logo’ya yazılır. Yazım tamamlanana kadar satır “Logo’ya yazılıyor” işaretlidir — o işaret kalkmadan değişiklik muhasebede geçerli değildir.'
+              : 'Fiyatlar Logo ile eşleşir. Değiştirme yetkisi yalnızca yöneticidedir.'}
           </p>
         </div>
       </div>
@@ -175,7 +253,9 @@ export default function FiyatListeleriSayfasi() {
             <span>Ürün</span>
             <span>Birim</span>
             <span>Fiyat</span>
-            <span style={{ textAlign: 'right' }}>Geçerlilik</span>
+            <span style={{ textAlign: 'right' }}>
+              {fiyatDegistirebilir ? 'Durum' : 'Geçerlilik'}
+            </span>
           </div>
 
           {satirlar.map((satir) => (
@@ -190,15 +270,80 @@ export default function FiyatListeleriSayfasi() {
                 {satir.minQuantity > 0 ? ` · min ${miktar(satir.minQuantity)}` : ''}
               </span>
 
-              <span className="fiyat">{para(satir.price, secilen?.currency ?? 'TRY')}</span>
+              {duzenlenen?.id === satir.id ? (
+                <div style={{ display: 'grid', gap: 6 }}>
+                  <input
+                    className="alan-girdi"
+                    style={{ maxWidth: 140 }}
+                    value={yeniFiyat}
+                    onChange={(olay) => setYeniFiyat(olay.target.value)}
+                    inputMode="decimal"
+                    autoFocus
+                    aria-label="Yeni fiyat"
+                  />
+                  <input
+                    className="alan-girdi"
+                    style={{ maxWidth: 260 }}
+                    value={gerekce}
+                    onChange={(olay) => setGerekce(olay.target.value)}
+                    placeholder="Değişiklik gerekçesi (zorunlu)"
+                    aria-label="Değişiklik gerekçesi"
+                  />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      className="dugme dugme-kucuk"
+                      disabled={kaydediliyor || gerekce.trim().length < 3}
+                      onClick={() => void fiyatiKaydet()}
+                    >
+                      {kaydediliyor ? 'Kaydediliyor…' : 'Kaydet ve Logo’ya Yaz'}
+                    </button>
+                    <button
+                      type="button"
+                      className="dugme dugme-ikincil dugme-kucuk"
+                      disabled={kaydediliyor}
+                      onClick={() => setDuzenlenen(null)}
+                    >
+                      Vazgeç
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <span className="fiyat">{para(satir.price, secilen?.currency ?? 'TRY')}</span>
+              )}
 
-              <span className="urun-alt" style={{ textAlign: 'right' }}>
-                {satir.validFrom || satir.validTo
-                  ? `${satir.validFrom ? tarihSaat(satir.validFrom) : '—'} → ${
-                      satir.validTo ? tarihSaat(satir.validTo) : 'süresiz'
-                    }`
-                  : 'Süresiz'}
-              </span>
+              <div
+                style={{
+                  textAlign: 'right',
+                  display: 'flex',
+                  gap: 8,
+                  justifyContent: 'flex-end',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <YazimRozeti satir={satir} />
+
+                {!fiyatDegistirebilir && (
+                  <span className="urun-alt">
+                    {satir.validFrom || satir.validTo
+                      ? `${satir.validFrom ? tarihSaat(satir.validFrom) : '—'} → ${
+                          satir.validTo ? tarihSaat(satir.validTo) : 'süresiz'
+                        }`
+                      : 'Süresiz'}
+                  </span>
+                )}
+
+                {fiyatDegistirebilir && duzenlenen?.id !== satir.id && (
+                  <button
+                    type="button"
+                    className="dugme dugme-ikincil dugme-kucuk"
+                    onClick={() => duzenlemeyiBaslat(satir)}
+                  >
+                    Değiştir
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

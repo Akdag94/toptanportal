@@ -150,6 +150,11 @@ const MENU: MenuGrubu[] = [
         yetkiler: [Permission.PRICE_LIST_MANAGE],
       },
       {
+        baslik: 'Katalog Yönetimi',
+        yol: '/panel/katalog-yonetimi',
+        yetkiler: [Permission.CATALOG_MANAGE],
+      },
+      {
         baslik: 'Logo Entegrasyonu',
         yol: '/panel/entegrasyon',
         yetkiler: [Permission.INTEGRATION_MANAGE],
