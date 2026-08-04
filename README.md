@@ -1,10 +1,49 @@
 # ToptanPortal
 
-HoReCa (otel, restoran, kafe) sektörüne tedarik yapan toptancılar için B2B e-ticaret ve müşteri portalı. Bayiler cari hesaplarını yönetir, kendilerine özel matris fiyatlarla 7/24 sipariş verir; saha satış temsilcileri portföylerini yönetir; arka planda Logo ERP (Go Wings / Tiger 3 / Enterprise) ile çift yönlü entegrasyon çalışır.
+**HoReCa tedarikçileri için B2B sipariş portalı — şirket içindeki Logo ERP ile çift yönlü, internete kapalı entegrasyon.**
+
+![NestJS](https://img.shields.io/badge/NestJS-10-E0234E?logo=nestjs&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![.NET](https://img.shields.io/badge/.NET-8-512BD4?logo=dotnet&logoColor=white)
+![SwiftUI](https://img.shields.io/badge/SwiftUI-iOS%2017+-F05138?logo=swift&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
+![Prisma](https://img.shields.io/badge/Prisma-2D3748?logo=prisma&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+
+Otel, restoran ve kafelere tedarik yapan toptancılar, siparişi hâlâ telefon ve WhatsApp'tan alır; fiyat, stok ve cari bakiye ERP'de kilitlidir. Bu portal o üç veriyi bayiye 7/24 açar: bayi kendi matris fiyatıyla sipariş verir, ekstresini görür, borcunu kartla öder — ve sipariş, muhasebecinin elini hiç değdirmeden Logo ERP'ye düşer.
+
+Tek kiracılı bir demo değil, gerçek bir kurulumun gerektirdiklerine göre yazıldı: rol bazlı yetki, değiştirilemez denetim kaydı (5651/5070), KVKK alan şifrelemesi, 10 yıllık e-Belge arşivi (VUK 253) ve saha ekibi için çevrimdışı çalışan bir iOS uygulaması.
 
 ---
 
 ## Mimari
+
+```mermaid
+flowchart LR
+    subgraph bulut["☁️  Bulut"]
+        direction TB
+        web["<b>web</b> · Next.js 15<br/>yönetim · muhasebe · plasiyer"]
+        ios["<b>ios</b> · SwiftUI<br/>saha · depo · barista"]
+        api["<b>api</b> · NestJS 10<br/>RBAC · Kör Sipariş · denetim zinciri"]
+        pg[("PostgreSQL 16")]
+        rd[("Redis 7")]
+        web --> api
+        ios --> api
+        api --> pg
+        api --> rd
+    end
+
+    subgraph onprem["🏢  Şirket içi ağ — dışarıdan erişilemez"]
+        direction TB
+        bridge["<b>logo-bridge</b> · .NET 8"]
+        logo[("Logo ERP<br/>MSSQL + Object Service")]
+        bridge --> logo
+    end
+
+    api == "mTLS tüneli<br/>bağlantıyı <b>her zaman bulut</b> başlatır" ==> bridge
+```
 
 ```
 apps/
@@ -19,6 +58,49 @@ packages/
 ```
 
 **Neden ayrı bir köprü servisi:** Logo ERP sunucusu asla genel internete açılmaz. Bulut tarafındaki API, şirket içindeki köprüye yalnızca karşılıklı sertifika doğrulaması (mTLS) yapılan bir tünel üzerinden erişir; köprü de yerel ağdaki MSSQL ve Logo Object Service ile konuşur.
+
+---
+
+## Öne çıkan mühendislik kararları
+
+Her biri aşağıda gerekçesiyle anlatılıyor; buradakiler projenin karakterini belirleyen kararlar.
+
+| Karar | Özet |
+|---|---|
+| [**Kör Sipariş Modu**](#kör-sipariş-modu) | Fiyat görmemesi gereken kullanıcıda parasal alanlar **maskelenmez, sunucuda silinir** — `0.00` yazmak bile veri modelini sızdırır. Aynı kural e-postada ve şablon motorunda da geçerli. |
+| [**Değiştirilemez denetim zinciri**](#yasal-delil-loglaması-5651--5070) | `hash(n) = SHA256(hash(n-1) ‖ kanonikJSON(kayıt))`. `UPDATE`/`DELETE`/`TRUNCATE` **veritabanı tetikleyicisiyle** engellenir; finansal işlem ile log yazımı aynı transaction'dadır — log yazılamıyorsa işlem de olmaz. |
+| [**mTLS köprü**](#logo-erp-entegrasyon-katmanı) | Şirket içi ağda dışarıya açık uç yok; bağlantıyı her zaman bulut başlatır. Köprü buluta hiç çağrı yapmaz. |
+| [**Kart verisi hiç dokunmaz**](#sanal-pos-3d-secure-ve-dbs) | 3D Secure yönlendirmesi; portal yalnızca maskeli kartı ve banka sonucunu görür. PCI-DSS kapsamı dışında kalmanın tek güvenilir yolu veriyi hiç görmemektir. |
+| [**Alan sahipliği modeli**](#katalog-yönetimi-ve-fiyat-değişikliği-portal--logo) | Portal ve Logo aynı kartı yazabildiği için "çakışırsa hangisi doğru" sorusu tek bayrakla değil, **alan bazında sahiplikle** çözülür; köken değişmez. |
+| [**KVKK alan şifrelemesi**](#kvkk) | Kişisel alanlar AES-256-GCM ile şifreli (`*_enc`), arama HMAC-SHA256 blind index ile (`*_idx`); şifreli metne anahtar kimliği gömülü, rotasyonda eski kayıt yeniden şifrelenmeden okunur. |
+| [**Çevrimdışı iOS kuyruğu**](#ios-uygulaması) | Depo bodrumda, soğuk hava deposunda sinyal yok. Sipariş/tahsilat/ziyaret diske atomik yazılır; idempotency anahtarı ve gövde **oluşturulurken** donar. |
+
+Bu kararların ortak yanı şu: kurallar mümkün olan her yerde **uygulama katmanının altına** indirilmiştir — veritabanı tetikleyicisi, kısıt ve şema. Uygulamadaki bir kontrol, yeni bir sorguyla veya doğrudan bağlanan bir araçla atlanabilir.
+
+---
+
+<!-- EKRAN GÖRÜNTÜLERİ — dosyaları docs/screenshots/ altına koyup bu bloğu yorumdan çıkarın.
+## Ekran görüntüleri
+
+| Sipariş ekranı | Cari ekstre | Denetim kaydı |
+|---|---|---|
+| ![Sipariş](docs/screenshots/siparis.png) | ![Ekstre](docs/screenshots/ekstre.png) | ![Denetim](docs/screenshots/denetim.png) |
+
+| Katalog yönetimi | Entegrasyon durumu | iOS saha ekranı |
+|---|---|---|
+| ![Katalog](docs/screenshots/katalog.png) | ![Entegrasyon](docs/screenshots/entegrasyon.png) | ![iOS](docs/screenshots/ios-saha.png) |
+
+---
+-->
+
+## İçindekiler
+
+- [Kurulum](#kurulum) · [Tohum verisi hesapları](#tohum-verisi-hesapları)
+- **Yetki ve güvenlik** — [RBAC](#rol-tabanlı-yetkilendirme-rbac) · [Kör Sipariş Modu](#kör-sipariş-modu) · [Kimlik doğrulama](#kimlik-doğrulama) · [Denetim zinciri](#yasal-delil-loglaması-5651--5070) · [KVKK](#kvkk) · [Kullanıcı yönetimi](#kullanıcı-yönetimi)
+- **Ticari akışlar** — [Toplu sipariş](#toplu-sipariş-excel--yapıştırma) · [Katalog ve fiyat](#katalog-yönetimi-ve-fiyat-değişikliği-portal--logo) · [Cari hesap ve tahsilat](#cari-hesap-ekstre-ve-tahsilat) · [Saha yönetimi](#saha-yönetimi--portföy-ziyaret-hedef)
+- **Belge ve ödeme** — [e-Fatura arşivi](#e-belge-arsivi) · [Sanal POS ve DBS](#sanal-pos-3d-secure-ve-dbs) · [e-Belge üretim hattı](#e-belge-üretim-hattı)
+- **Entegrasyon** — [Logo ERP katmanı](#logo-erp-entegrasyon-katmanı) · [Bildirim](#bildirim-e-posta-ve-mobil) · [Bildirim metinleri](#bildirim-metinleri-kiracı-şablonları)
+- **Diğer** — [Bilinen ödünler](#bilinen-ödünler) · [iOS uygulaması](#ios-uygulaması) · [Sıradaki modüller](#sıradaki-modüller) · [CI](#sürekli-tümleştirme) · [Komutlar](#komutlar)
 
 ---
 
@@ -168,6 +250,7 @@ Köken (`LOGO` / `PORTAL`) **değişmez**: portalden güncellenen bir Logo kart�
 - Ciro, plasiyerin **portföyündeki** bayilerin siparişlerinden gelir — siparişi kimin girdiğinden değil. Aksi hâlde portalin benimsenmesi plasiyerin çıkarına aykırı olurdu.
 - Gerçekleşen ciro önbelleklenmez; her okumada hesaplanır.
 
+<a id="e-belge-arsivi"></a>
 ### e-Fatura / e-İrsaliye arşivi
 
 **PDF asıl belge değildir.** Hukuki asıl, UBL-TR 1.2 biçimindeki imzalı XML'dir; PDF ondan türetilmiş görüntüleme kopyasıdır. İhtilafta mahkemeye XML sunulur, bu yüzden arşiv XML üzerine kurulur ve ikisi çelişirse doğru olan XML'dir.
@@ -338,3 +421,13 @@ CI **çalışan bir veritabanı istemez**: koşulan testler saf mantığı doğr
 | `pnpm build` | Tüm paketleri derle |
 | `cd apps/logo-bridge && dotnet test` | Logo köprüsü testleri |
 | `cd apps/ios && xcodegen generate` | Xcode projesini üret |
+
+---
+
+## Lisans
+
+**Telif hakkı © 2026 Azat Akdağ — Tüm hakları saklıdır.**
+
+Bu depo, yapılan mühendislik çalışmasının incelenebilmesi için erişime açılmıştır; kodu okuyabilir ve değerlendirebilirsiniz. **Hiçbir kullanım hakkı verilmemektedir:** yazılımın tamamı veya bir parçası, yazılı izin olmaksızın ticari ya da ticari olmayan hiçbir amaçla kullanılamaz, kopyalanamaz, değiştirilemez, dağıtılamaz veya barındırılamaz.
+
+Ayrıntılar için [LICENSE](LICENSE) dosyasına bakın.
