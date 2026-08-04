@@ -9,6 +9,7 @@ HoReCa (otel, restoran, kafe) sektörüne tedarik yapan toptancılar için B2B e
 ```
 apps/
   api/          NestJS 10 · REST API · RBAC · Kör Sipariş kalkanı · yasal delil loglaması
+                (Logo'yu hem okur hem yazar: katalog ve fiyat çift yönlüdür)
   web/          Next.js 15 · yönetim, muhasebe ve plasiyer arayüzü
   ios/          SwiftUI · barista, depo ve saha uygulaması
   logo-bridge/  .NET 8 · şirket içi (on-prem) Logo köprüsü — mTLS ile bağlanır
@@ -129,9 +130,26 @@ Ekran `/panel/toplu-siparis`, uç `POST /cart/bulk-import`. Bayilerin çoğu sip
 - Sonuç raporu eksiksizdir: kaç satır okundu, kaçı sepete girdi, hangileri eşleşmedi. "37 kalem eklendi" demek yetmez — kullanıcı 40 satır yüklediğini bilir ve eksiği aramak zorunda kalmamalıdır.
 - Kurallar `apps/api/src/cart/bulk-import.service.spec.ts` ile kilitlenmiştir.
 
-### Fiyat listeleri
+### Katalog yönetimi ve fiyat değişikliği (portal → Logo)
 
-Ekran `/panel/fiyat-listeleri` (`PRICE_LIST_MANAGE`) **salt okunurdur; düzenleme düğmesi yoktur.** Fiyatlar Logo'dan senkronlanır. Fiyatı portalden değiştirmek, iki sistem arasında hangisinin doğru olduğu belirsiz bir alan yaratır ve bir sonraki senkron o değişikliği sessizce geri alır — kullanıcı da neden geri alındığını asla anlamaz. Ekranın işi fiyatı değiştirmek değil, "bu bayi bu ürünü kaçtan alıyor" sorusunu cevaplamaktır; o soru her gün telefonda sorulur.
+Portal Logo'yu yalnızca okumaz: ürün kartı açar ve fiyat değiştirir. Ekranlar `/panel/katalog-yonetimi` (`CATALOG_MANAGE`) ve `/panel/fiyat-listeleri` (`PRICE_LIST_MANAGE` görür, `PRICE_CHANGE` değiştirir).
+
+İki sistemin aynı alanı yazabildiği her yerde "çakıştıklarında hangisi doğru" sorusu doğar. Cevap tek bir bayrakla verilemez, çünkü bir stok kartının farklı alanlarının doğal sahibi farklıdır — bu yüzden sahiplik yazılıdır (`packages/contracts/src/catalog-write.schema.ts`):
+
+- **Sunum alanları** (açıklama, görsel, kategori, sıralama, sipariş sınırları) her zaman **portalindir**; Logo bunları zaten tutmaz ve senkron onlara dokunmaz.
+- **Kimlik alanları** (ad, birim seti, KDV oranı) kartın **kökenine** göre sahiplenilir. Logo'da açılmış bir kartın adını portalden değiştirmek, muhasebecinin defterinde gördüğü adı haberi olmadan değiştirmektir.
+- **Stok ve muhasebe alanları** her koşulda **Logo'nundur**.
+
+Köken (`LOGO` / `PORTAL`) **değişmez**: portalden güncellenen bir Logo kartı portalin malı olmaz. Değişebilir bir köken, sahiplik kuralını her güncellemede yeniden tanımlar ve kural olmaktan çıkar.
+
+- **Stok kodu değiştirilemez** (veritabanı tetikleyicisi). Kodu değiştirmek, Logo'da yeni kart açıp eskisini sahipsiz bırakmakla aynı şeydir: geçmiş hareket, fatura ve sipariş eski kodda kalır, portal başka kartı gösterir. Yanlış kod girildiyse kart arşivlenir, yenisi açılır.
+- **Yazım kuyruktan geçer**, doğrudan çağrıyla değil. Kullanıcının kart açma işlemi köprünün o andaki erişilebilirliğine bağlı olmamalıdır; erişilemediği için başarısız olan bir kayıt "kaydedilmedi" der ve o kişi aynı kartı baştan girer.
+- **Yazım durumu ekranda görünür** (`SYNCED` / `PENDING` / `FAILED`). Bu işaret olmasaydı kullanıcı yeni fiyatı görüp işinin bittiğini sanardı; fark ancak fatura kesildikten sonra anlaşılırdı. Dördüncü bir "bilinmiyor" durumu yoktur — operatör o durumda ne yapacağını bilemez.
+- **Kart taslak doğar ve yayına Logo yazımından sonra alınır.** Önce yayına alıp sonra yazmak, Logo'da olmayan bir ürünü satışa açmaktır. Kısıt veritabanındadır: Logo referansı olmayan portal kartı `PUBLISHED` olamaz.
+- **Senkron, portalde bekleyen değişikliğin üstüne yazmaz** (`apps/api/src/integration/catalog-ownership.ts`). Kuyrukta bekleyen bir fiyat varsa Logo'dan gelen değer o değişiklikten öncesine aittir; üstüne yazmak kullanıcının değişikliğini o daha ekrandan ayrılmadan geri alır. Reddedilmiş satırın üstüne de yazılmaz — ayrışma düzeltilene kadar **görünür** kalmalıdır.
+- **Toplu fiyat güncelleme yoktur.** Bir ekrandan yüzlerce fiyatı birden değiştirmek, yanlış bir yüzdeyi tüm katalogda uygulamayı bir tıklık hale getirir ve geri alınması Logo'da elle düzeltme gerektirir. Toplu iş gerektiğinde doğru araç Logo'nun kendi ekranıdır; oradan yapılan değişiklik zaten senkronla portale gelir.
+- **Fiyat değişikliğinde gerekçe zorunludur** ve denetim kaydına **eski değerle birlikte** yazılır. Altı ay sonra "bana neden bu fiyattan kesildi" sorusu geldiğinde yeni değeri görmek yetmez; eski değer üzerine yazılmıştır ve başka hiçbir yerde durmaz.
+- `PRICE_CHANGE`, `PRICE_LIST_MANAGE`'den **ayrı** bir yetkidir: ikincisi fiyatı görmeyi açar, birincisi kesilecek faturayı değiştirir. Var olan bir yetkinin anlamını genişletmek, onu taşıyan herkese haberi olmadan yeni bir güç vermektir.
 
 ### Cari hesap, ekstre ve tahsilat
 
@@ -226,6 +244,9 @@ Bulut API ile şirket içindeki Logo arasında yalnızca **mTLS ile korunan bir 
 | Cari hareket | Logo → portal | 15 dk |
 | Fiyat | Logo → portal | 30 dk |
 | Sipariş | portal → Logo | 30 sn |
+| Katalog yazımı | portal → Logo | 1 dk |
+
+**Katalog yazımı siparişten ayrı bir kanaldır.** Katalog yazımı bekleyebilir, sipariş bekleyemez; ikisini tek kanala koymak, bir fiyat değişikliğinin arkasında bekleyen siparişi geciktirir — müşteri fiyat değişikliğini beklemez, siparişinin gitmesini bekler. Kuyruktan olay alımı **olay türüyle sınırlıdır**: ayrım yapmayan bir işleyici, anlamadığı olayı ölü işaretler ve o kayıt bir daha hiç işlenmez.
 
 - **İmleç, zaman damgası değil Logo değişiklik sırasıdır.** Sistem saatleri birkaç saniye kaydığında zaman damgasıyla ilerleyen bir akış, o aralıktaki kayıtları sessizce atlar; atlanan kayıt fark akışında bir daha gelmez.
 - **Hata sınıflandırması** aktarımın merkezindedir: ağ / zaman aşımı / 5xx **geçicidir** (tekrar denenir, sipariş kuyrukta kalır), 4xx iş kuralı hatası **kalıcıdır** (olay ölü işaretlenir, operatöre düşer). Ayrım yapılmazsa ya kalıcı hata kuyruğu tıkar ya da geçici hata sipariş kaybettirir.
@@ -283,12 +304,14 @@ Tasarım ilkeleri: birincil eylemler ekranın alt şeridinde sabit durur (bir el
 
 ## Sıradaki modüller
 
-1. **e-İrsaliye sevk akışı** — belge üretimi hazır (`buildDespatchAdviceXml`); irsaliyeyi doğuran sevkiyat kaydı ve araç/şoför bilgisi portalde henüz tutulmuyor
-2. **e-Arşiv raporu** — GİB'e günlük e-Arşiv raporu iletimi; entegratör bağlantısı hazır, rapor üretimi ayrı bir iştir
-3. **Kampanya (ticari ileti) kanalı** — İYS izni ile çalışan ayrı bir boru. İşlemsel bildirimle **aynı kuyruğa konmayacak**; ikisini birleştirmek, izinsiz gönderimi bir yapılandırma hatası kadar yakın hale getirir
-4. **Veritabanı gerektiren tümleşik testler** — CI şu an yalnızca birim testlerini koşar; PostgreSQL'li bir iş akışı ayrıca kurulacak
+1. **Kiracı kayıt ve provizyon akışı** — `Tenant` şemada var ve her tabloda kapsam çizili, ancak kiracı elle açılıyor: platform operatörü rolü, kiracı açma sihirbazı (firma bilgisi, Logo bağlantı ayarları, ilk yönetici) ve abonelik durumu yok. Her yeni müşteri şu anda elle kurulum demek
+2. **WhatsApp bildirim kanalı** — bildirim altyapısı hazır (`EMAIL`, `PUSH`); eklenecek olan `WHATSAPP` kanalı ve Meta Cloud API taşıyıcısıdır. İşlemsel mesaj önceden onaylanmış şablonla gider (24 saat penceresi dışında serbest metin gitmez) — bu, "içerik kuyruğa yazılırken donar" tasarımıyla uyumludur ama şablonların Meta'ya kaydedilip onay beklemesi ayrı bir operasyondur
+3. **e-İrsaliye sevk akışı** — belge üretimi hazır (`buildDespatchAdviceXml`); irsaliyeyi doğuran sevkiyat kaydı ve araç/şoför bilgisi portalde henüz tutulmuyor
+4. **e-Arşiv raporu** — GİB'e günlük e-Arşiv raporu iletimi; entegratör bağlantısı hazır, rapor üretimi ayrı bir iştir
+5. **Kampanya (ticari ileti) kanalı** — İYS izni ile çalışan ayrı bir boru. İşlemsel bildirimle **aynı kuyruğa konmayacak**; ikisini birleştirmek, izinsiz gönderimi bir yapılandırma hatası kadar yakın hale getirir
+6. **Veritabanı gerektiren tümleşik testler** — CI şu an yalnızca birim testlerini koşar; PostgreSQL'li bir iş akışı ayrıca kurulacak
 
-Tamamlananlar: stok rezervasyonu ve sipariş motoru, matris fiyat ve kademeli iskonto, cari hesap / ekstre / yaşlandırma, tahsilat kaydı, sipariş risk kalkanı, Logo entegrasyonunun bulut tarafı ve köprü (kurulum tanılaması dahil), 3D Secure sanal POS, DBS, e-Belge arşivi **ve üretim hattı**, saha yönetimi, toplu sipariş içe aktarımı, kullanıcı yönetimi, denetim kaydı sorgulama, bildirim kanalı **ve kiracı şablonları**, iOS uygulamasının çekirdek akışları ve **Xcode proje tanımı + CI**.
+Tamamlananlar: stok rezervasyonu ve sipariş motoru, matris fiyat ve kademeli iskonto, cari hesap / ekstre / yaşlandırma, tahsilat kaydı, sipariş risk kalkanı, Logo entegrasyonunun bulut tarafı ve köprü (kurulum tanılaması dahil), **portal → Logo katalog ve fiyat yazımı**, 3D Secure sanal POS, DBS, e-Belge arşivi **ve üretim hattı**, saha yönetimi, toplu sipariş içe aktarımı, kullanıcı yönetimi, denetim kaydı sorgulama, bildirim kanalı **ve kiracı şablonları**, iOS uygulamasının çekirdek akışları ve **Xcode proje tanımı + CI**.
 
 Temel altyapı (`OutboxEvent`, `IdempotencyKey`, denetim zinciri) bu modüller için şemada hazırdır.
 
