@@ -267,8 +267,8 @@ export const productUpdateSchema = z
     minOrderQuantity: z.number().nonnegative().optional(),
     maxOrderQuantity: z.number().positive().nullish(),
     sortOrder: z.number().int().min(0).max(99999).optional(),
-    /** `ACTIVE` yayinda, `DRAFT` katalogda gorunmez, `ARCHIVED` siparis alamaz. */
-    status: z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']).optional(),
+    /** `PUBLISHED` yayinda, `DRAFT` katalogda gorunmez, `ARCHIVED` siparis alamaz. */
+    status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']).optional(),
   })
   .refine((deger) => Object.keys(deger).length > 0, {
     message: 'Değiştirilecek en az bir alan gönderilmelidir.',
@@ -344,7 +344,7 @@ export const adminProductViewSchema = z.object({
   minOrderQuantity: z.number(),
   maxOrderQuantity: z.number().nullable(),
   sortOrder: z.number().int(),
-  status: z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']),
+  status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']),
   origin: z.nativeEnum(ProductOrigin),
   logoWriteState: z.nativeEnum(LogoWriteState),
   logoWriteError: z.string().nullable(),
