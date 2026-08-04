@@ -97,10 +97,29 @@ export const AuditAction = {
   NOTIFICATION_TEMPLATE_CHANGED: 'notification.template.changed',
   NOTIFICATION_TEMPLATE_RESET: 'notification.template.reset',
 
+  // --- Katalog yonetimi ---
+  /**
+   * Stok karti portalde ACILDI. Logo'da kalici bir kart doguracak bir islemdir
+   * ve kartin kodu sonradan degistirilemez; kimin hangi kodu actigi, o kodla
+   * yapilacak tum hareketlerin baslangic noktasidir.
+   */
+  PRODUCT_CREATED: 'catalog.product.created',
+  PRODUCT_UPDATED: 'catalog.product.updated',
+  /**
+   * Fiyat degistirildi.
+   *
+   * Payload ESKI ve YENI degeri birlikte tasir. Yalnizca yeniyi yazmak,
+   * "bana neden bu fiyattan kesildi" sorusunu cevaplanamaz birakir: eski
+   * deger o anda baska bir kayitta durmaz, uzerine yazilmistir.
+   */
+  PRICE_CHANGED: 'catalog.price.changed',
+
   // --- Entegrasyon ---
   LOGO_SYNC_STARTED: 'integration.logo.sync.started',
   LOGO_SYNC_COMPLETED: 'integration.logo.sync.completed',
   LOGO_SYNC_FAILED: 'integration.logo.sync.failed',
+  LOGO_CATALOG_WRITTEN: 'integration.logo.catalog.written',
+  LOGO_CATALOG_REJECTED: 'integration.logo.catalog.rejected',
 } as const;
 
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];
@@ -146,9 +165,14 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'e-document.status.changed': 'e-Belge durumu değişti',
   'notification.template.changed': 'Bildirim metni değiştirildi',
   'notification.template.reset': 'Bildirim metni varsayılana döndürüldü',
+  'catalog.product.created': 'Ürün kartı açıldı',
+  'catalog.product.updated': 'Ürün kartı güncellendi',
+  'catalog.price.changed': 'Fiyat değiştirildi',
   'integration.logo.sync.started': 'Logo senkronu başladı',
   'integration.logo.sync.completed': 'Logo senkronu tamamlandı',
   'integration.logo.sync.failed': 'Logo senkronu başarısız',
+  'integration.logo.catalog.written': 'Katalog Logo’ya yazıldı',
+  'integration.logo.catalog.rejected': 'Logo katalog yazımını reddetti',
 };
 
 export const AuditActorType = {

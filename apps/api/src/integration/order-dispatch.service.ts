@@ -29,6 +29,15 @@ import { SyncCursorService } from './sync-cursor.service';
 /** Tek turda islenecek olay sayisi. Kucuk tutulur: her olay bir ag cagrisidir. */
 const TUR_BOYU = 20;
 
+/**
+ * Bu isleyicinin ANLADIGI olaylar.
+ *
+ * Kuyruktan ayrim yapmadan cekmek, katalog olaylarini da bu isleyiciye
+ * getirirdi; o da onlari "bilinmeyen olay türü" diyerek olu isaretlerdi ve
+ * portalde acilan kart Logo'ya bir daha hic yazilmazdi.
+ */
+const SIPARIS_OLAYLARI = [OutboxEventType.ORDER_PLACED, OutboxEventType.ORDER_CANCELLED] as const;
+
 @Injectable()
 export class OrderDispatchService {
   private readonly logger = new Logger(OrderDispatchService.name);
@@ -49,7 +58,7 @@ export class OrderDispatchService {
     let islenen = 0;
 
     try {
-      const olaylar = await this.outbox.claimBatch(workerId, TUR_BOYU);
+      const olaylar = await this.outbox.claimBatch(workerId, SIPARIS_OLAYLARI, TUR_BOYU);
 
       for (const { id } of olaylar) {
         await this.dispatch(id);
@@ -68,6 +77,18 @@ export class OrderDispatchService {
   private async dispatch(eventId: bigint): Promise<void> {
     const olay = await this.prisma.outboxEvent.findUnique({ where: { id: eventId } });
     if (!olay) return;
+
+    if (olay.eventType === OutboxEventType.ORDER_CANCELLED) {
+      /* Iptal olayi yalnizca KUYRUKTAKI siparis icin uretilir - yani Logo'ya
+         henuz yazilmamis siparis icin. Logo'ya iletilecek bir sey yoktur:
+         bekleyen `order.placed` olayi zaten iptal edilmis siparisi gormeyip
+         gondermeden kapaniyor. Olay burada tamamlanmis sayilir.
+
+         Logo'ya YAZILMIS bir siparis portalden iptal edilemez (bkz.
+         OrderService.cancel); o iptal Logo'da elle yapilir. */
+      await this.outbox.markSent(eventId);
+      return;
+    }
 
     if (olay.eventType !== OutboxEventType.ORDER_PLACED) {
       /* Bu isleyici yalnizca siparis olaylarini bilir. Tanimadigi bir olayi

@@ -17,13 +17,33 @@ import { PrismaService } from '../prisma/prisma.service';
 export const OutboxEventType = {
   ORDER_PLACED: 'order.placed',
   ORDER_CANCELLED: 'order.cancelled',
+  /**
+   * Stok karti portalde acildi veya duzenlendi; Logo'ya yazilmasi gerekiyor.
+   *
+   * Kart yazimi da outbox'tan gecer, dogrudan cagriyla degil: kullanicinin
+   * kart acma islemi, Logo'nun (ya da koprunun) o andaki erisilebilirligine
+   * bagli olmamalidir. Erisilemedigi icin basarisiz olan bir kayit, kullaniciya
+   * "kaydedilmedi" der ve o kisi ayni karti bastan girer.
+   */
+  PRODUCT_UPSERTED: 'catalog.product.upserted',
+  /** Fiyat portalde degistirildi; Logo'ya yazilmasi gerekiyor. */
+  PRICE_CHANGED: 'catalog.price.changed',
 } as const;
 
 export type OutboxEventType = (typeof OutboxEventType)[keyof typeof OutboxEventType];
 
+/**
+ * Olayin isaret ettigi kayit turu.
+ *
+ * Serbest metin DEGILDIR: isleyiciler bu alana bakarak olayi tanir ve tanimadigi
+ * olayi olu isaretler. Yazim hatasi tasiyan bir tur, olayin sessizce hicbir
+ * isleyici tarafindan alinmamasina yol acardi.
+ */
+export type OutboxAggregateType = 'Order' | 'Product' | 'PriceListItem';
+
 export interface OutboxEventInput {
   tenantId: string;
-  aggregateType: 'Order';
+  aggregateType: OutboxAggregateType;
   aggregateId: string;
   eventType: OutboxEventType;
   payload: Prisma.InputJsonValue;
@@ -51,8 +71,21 @@ export class OutboxService {
    * Isleyici (worker) icin: gonderilmeyi bekleyen olaylari kilitleyerek alir.
    * `FOR UPDATE SKIP LOCKED` sayesinde birden fazla isleyici ayni olayi
    * iki kez almaz; yatay olceklenme mumkun kalir.
+   *
+   * OLAY TURU ZORUNLUDUR. Her isleyici yalnizca ANLADIGI olayi alir; kuyruktan
+   * ayrim yapmadan cekmek, siparis isleyicisinin bir katalog olayini alip
+   * "bilinmeyen olay türü" diyerek OLU isaretlemesi demektir - olay bir daha
+   * hic islenmez ve kart Logo'ya sonsuza kadar yazilmaz. Suzgeci cagiran
+   * tarafa birakmak da yetmez: filtre unutuldugunda hata sessizdir ve ancak
+   * bir kartin eksikligi fark edildiginde ortaya cikar.
    */
-  async claimBatch(workerId: string, batchSize = 20): Promise<{ id: bigint }[]> {
+  async claimBatch(
+    workerId: string,
+    eventTypes: readonly OutboxEventType[],
+    batchSize = 20,
+  ): Promise<{ id: bigint }[]> {
+    if (eventTypes.length === 0) return [];
+
     return this.prisma.$queryRaw<{ id: bigint }[]>`
       UPDATE outbox_events
       SET status = ${OutboxStatus.PROCESSING}::"OutboxStatus",
@@ -63,6 +96,7 @@ export class OutboxService {
         SELECT id FROM outbox_events
         WHERE status = ${OutboxStatus.PENDING}::"OutboxStatus"
           AND "nextAttemptAt" <= NOW()
+          AND "eventType" IN (${Prisma.join([...eventTypes])})
         ORDER BY id
         LIMIT ${batchSize}
         FOR UPDATE SKIP LOCKED
