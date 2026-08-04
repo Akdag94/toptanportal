@@ -64,9 +64,16 @@ import type {
   PaymentView,
   PlaceOrderRequest,
   PlaceOrderResult,
+  PriceChangeRequest,
   PriceListItemPage,
   PriceListItemQuery,
+  PriceListItemView,
   PriceListView,
+  AdminProductPage,
+  AdminProductQuery,
+  AdminProductView,
+  ProductCreateRequest,
+  ProductUpdateRequest,
   PosTransactionView,
   RecordPaymentRequest,
   SessionUser,
@@ -687,7 +694,10 @@ export const userApi = {
 };
 
 // ---------------------------------------------------------------------------
-// Fiyat listeleri (salt okunur - fiyatlar Logo'dan gelir)
+// Fiyat listeleri
+//
+// Liste TANIMI Logo'dan gelir ve portalde acilmaz. Liste SATIRI - fiyatin
+// kendisi - degistirilebilir ve degisiklik Logo'ya yazilir.
 // ---------------------------------------------------------------------------
 
 export const priceListApi = {
@@ -695,6 +705,38 @@ export const priceListApi = {
 
   items: (query: PriceListItemQuery) =>
     request<PriceListItemPage>(`/price-lists/items${toQuery({ ...query })}`),
+
+  /**
+   * Fiyati degistirir ve Logo'ya yazilmak uzere kuyruga alir.
+   *
+   * Yanit satirin GUNCEL halini doner ve `logoWriteState` alani `PENDING`
+   * gelir; ekran bunu gostermelidir. Degisikligi yapilmis gibi gostermek,
+   * yazim kuyrukta beklerken ya da reddedilmisken kullaniciyi yanlis
+   * bilgilendirmektir.
+   */
+  change: (body: PriceChangeRequest) =>
+    request<PriceListItemView>('/price-lists/items', { method: 'POST', body }),
+};
+
+// ---------------------------------------------------------------------------
+// Katalog yonetimi (portal -> Logo)
+//
+// Okuma uclarindan (`catalogApi`) ayri durur: bunlar CATALOG_MANAGE ister ve
+// her cagri Logo'da kalici bir kayit dogurur.
+// ---------------------------------------------------------------------------
+
+export const catalogAdminApi = {
+  list: (query: Partial<AdminProductQuery> = {}) =>
+    request<AdminProductPage>(`/catalog-admin/products${toQuery({ ...query })}`),
+
+  create: (body: ProductCreateRequest) =>
+    request<AdminProductView>('/catalog-admin/products', { method: 'POST', body }),
+
+  update: (productId: string, body: ProductUpdateRequest) =>
+    request<AdminProductView>(`/catalog-admin/products/${productId}`, {
+      method: 'PATCH',
+      body,
+    }),
 };
 
 // ---------------------------------------------------------------------------

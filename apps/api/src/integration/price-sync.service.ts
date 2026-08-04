@@ -20,7 +20,7 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import { LogoWriteState, SyncChannel } from '@toptanportal/db';
+import { SyncChannel } from '@toptanportal/db';
 import { SyncChannel as SyncChannelContract, type SyncRunResult } from '@toptanportal/contracts';
 
 import { PrismaService } from '../common/prisma/prisma.service';

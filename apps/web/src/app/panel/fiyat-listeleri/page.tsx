@@ -1,22 +1,29 @@
 'use client';
 
 /**
- * Fiyat Listeleri (salt okunur)
+ * Fiyat Listeleri
  *
- * Fiyatlar Logo'dan senkronlanır; portal onları değiştirmez. Bu ekranda
- * düzenleme düğmesi YOKTUR — fiyatı portalden değiştirmek, iki sistem arasında
- * hangisinin doğru olduğu belirsiz bir alan yaratır ve bir sonraki senkron o
- * değişikliği sessizce geri alır.
+ * Ekranın ilk işi hâlâ "bu bayi bu ürünü kaçtan alıyor" sorusunu cevaplamaktır
+ * — o soru her gün, telefonda sorulur. İkinci işi fiyatı değiştirmektir ve
+ * değişiklik Logo'ya yazılır.
  *
- * Ekranın işi fiyatı değiştirmek değil, "bu bayi bu ürünü kaçtan alıyor"
- * sorusunu cevaplamaktır — bu soru her gün, telefonda sorulur.
+ * Eski gerekçe ("portalden değiştirilen fiyatı senkron geri alır") doğruydu;
+ * çözüm fiyatı portalde tutmak değil, değişikliği Logo'ya TAŞIMAKTIR. Bu
+ * yüzden ekranda tek bir şey daha var: yazımın Logo'ya ulaşıp ulaşmadığını
+ * gösteren rozet. O rozet olmadan kullanıcı yeni fiyatı görür ve işinin
+ * bittiğini sanır.
+ *
+ * Toplu düzenleme YOKTUR. Bir ekrandan yüzlerce fiyatı birden değiştirmek,
+ * yanlış bir yüzdeyi tüm katalogda uygulamayı bir tıklık hale getirir.
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { LOGO_WRITE_STATE_LABELS } from '@toptanportal/contracts';
 import type { PriceListItemView, PriceListView } from '@toptanportal/contracts';
 
 import { priceListApi } from '../../../lib/api-client';
 import { miktar, para, tarihSaat } from '../../../lib/bicim';
+import { useSession } from '../../../lib/session-context';
 
 export default function FiyatListeleriSayfasi() {
   const [listeler, setListeler] = useState<PriceListView[]>([]);

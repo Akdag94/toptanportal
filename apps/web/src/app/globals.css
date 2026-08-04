@@ -519,6 +519,29 @@ h3 {
   border: 1px solid rgba(52, 211, 153, 0.4);
 }
 
+/* Logo yazma durumu.
+
+   SYNCED icin rozet CIZILMEZ: "her sey yolunda" bilgisi her satirda
+   tekrarlandiginda gorsel gurultu olur ve asil bakilmasi gereken iki durum
+   (bekleyen, reddedilen) arasinda kaybolur. */
+.rozet.yazim-bekliyor {
+  color: var(--uyari);
+  background: var(--uyari-yumusak);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+}
+
+.rozet.yazim-reddedildi {
+  color: var(--hata);
+  background: var(--hata-yumusak);
+  border: 1px solid rgba(251, 113, 133, 0.4);
+}
+
+.rozet.koken {
+  color: var(--metin-ikincil);
+  background: var(--yuzey-ikincil);
+  border: 1px solid var(--kenarlik);
+}
+
 /* ---------------------------------------------------------------------------
    Kartlar
    --------------------------------------------------------------------------- */
