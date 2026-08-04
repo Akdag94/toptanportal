@@ -80,5 +80,34 @@ public static class Endpoints
                 ? Results.UnprocessableEntity(hata)
                 : Results.Ok(sonuc);
         });
+
+        /* KATALOG YAZIMI: portalde acilan/duzenlenen kart ve fiyat.
+           Siparis ucuyla ayni hata sozlesmesini kullanir - 422 kalici, 5xx
+           gecici. Iki yazim yolunun ayni siniflandirmayi paylasmasi sarttir:
+           farklilasirsa, ayni ag hatasi bir yolda kuyrukta beklerken otekinde
+           olu isaretlenir. */
+        grup.MapPost("/items", async (
+            BridgeItemPush item,
+            CatalogWriter writer,
+            CancellationToken ct) =>
+        {
+            var (sonuc, hata) = await writer.WriteItemAsync(item, ct);
+
+            return hata is not null
+                ? Results.UnprocessableEntity(hata)
+                : Results.Ok(sonuc);
+        });
+
+        grup.MapPost("/prices", async (
+            BridgePricePush price,
+            CatalogWriter writer,
+            CancellationToken ct) =>
+        {
+            var (sonuc, hata) = await writer.WritePriceAsync(price, ct);
+
+            return hata is not null
+                ? Results.UnprocessableEntity(hata)
+                : Results.Ok(sonuc);
+        });
     }
 }

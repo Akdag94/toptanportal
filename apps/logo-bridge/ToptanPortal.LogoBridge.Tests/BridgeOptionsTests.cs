@@ -123,6 +123,55 @@ public sealed class BridgeOptionsTests
     }
 
     [Fact]
+    public void Katalog_yazimi_yarim_yapilandirilamaz()
+    {
+        /* Yalnizca kart adresi tanimliysa portal urunu Logo'ya yazar ama
+           fiyatini yazamaz. Kullanici urunu acar, fiyatini girer ve fiyatin
+           gitmedigini ancak ilk siparis yanlis tutarla dustugunde ogrenir. */
+        var yalnizKart = Gecerli() with { ObjectServiceItemUrl = "http://logo:8080/items" };
+        var yalnizFiyat = Gecerli() with { ObjectServicePriceUrl = "http://logo:8080/prices" };
+
+        Assert.Contains(yalnizKart.Validate(), h => h.Contains("birlikte tanımlanmalıdır"));
+        Assert.Contains(yalnizFiyat.Validate(), h => h.Contains("birlikte tanımlanmalıdır"));
+    }
+
+    [Fact]
+    public void Katalog_yazimi_iki_adres_birlikte_verilince_acilir()
+    {
+        var options = Gecerli() with
+        {
+            ObjectServiceItemUrl = "http://logo:8080/items",
+            ObjectServicePriceUrl = "http://logo:8080/prices",
+        };
+
+        Assert.Empty(options.Validate());
+        Assert.True(options.CanWriteCatalog);
+    }
+
+    [Fact]
+    public void Katalog_adresleri_tanimsizken_katalog_yazimi_kapalidir()
+    {
+        /* Kapali olmak mesrudur: katalogunu Logo'da yoneten bir kurulum yalnizca
+           okur. Kapaliyken "tamam" donmek ise portalde Logo'da olmayan bir
+           urunu yayina almaktir. */
+        Assert.False(Gecerli().CanWriteCatalog);
+    }
+
+    [Theory]
+    [InlineData("logo-sunucu:8080/items")]
+    [InlineData("ftp://logo-sunucu/items")]
+    public void Bozuk_katalog_adresi_reddedilir(string adres)
+    {
+        var options = Gecerli() with
+        {
+            ObjectServiceItemUrl = adres,
+            ObjectServicePriceUrl = "http://logo:8080/prices",
+        };
+
+        Assert.Contains(options.Validate(), h => h.Contains("ObjectServiceItemUrl"));
+    }
+
+    [Fact]
     public void Sifir_zaman_asimi_reddedilir()
     {
         // Sinirsiz bekleyen bir sorgu, Logo tarafinda kilitlenen tek bir

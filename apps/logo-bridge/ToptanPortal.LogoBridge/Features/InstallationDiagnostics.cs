@@ -26,21 +26,31 @@ public sealed class InstallationDiagnostics
     private readonly LogoDatabase _db;
     private readonly BridgeOptions _options;
     private readonly ILogoOrderSink _sink;
+    private readonly ILogoCatalogSink _catalogSink;
 
-    public InstallationDiagnostics(LogoDatabase db, BridgeOptions options, ILogoOrderSink sink)
+    public InstallationDiagnostics(
+        LogoDatabase db,
+        BridgeOptions options,
+        ILogoOrderSink sink,
+        ILogoCatalogSink catalogSink)
     {
         _db = db;
         _options = options;
         _sink = sink;
+        _catalogSink = catalogSink;
     }
 
     /// <summary>Koprunun okudugu her tablo ve o tablodan istedigi kolonlar.</summary>
     private IReadOnlyList<(string Table, string[] Columns)> RequiredObjects =>
     [
         (_options.PeriodTable("STINVTOT"), ["LOGICALREF", "STOCKREF", "INVENNO", "ONHAND", "ORDERRESERVED"]),
-        (_options.FirmTable("ITEMS"), ["LOGICALREF", "CODE", "ACTIVE", "UNITSETREF"]),
+        /* CARDTYPE ve PRELISTNO katalog YAZIMI icin gereklidir: ilki portalin
+           ustune yazamayacagi kart turlerini ayirt eder, ikincisi fiyatin hangi
+           listeye yazildigini belirler. Okuma akislari onlarsiz da calisirdi;
+           yazim calismaz ve eksiklik ilk kart aciminda gorunur. */
+        (_options.FirmTable("ITEMS"), ["LOGICALREF", "CODE", "ACTIVE", "UNITSETREF", "CARDTYPE"]),
         (_options.FirmTable("UNITSETL"), ["LOGICALREF", "CODE", "MAINUNIT"]),
-        (_options.FirmTable("PRCLIST"), ["LOGICALREF", "CARDREF", "PTYPE", "PRICE"]),
+        (_options.FirmTable("PRCLIST"), ["LOGICALREF", "CARDREF", "PTYPE", "PRICE", "PRELISTNO", "UOMREF"]),
         (_options.FirmTable("CLCARD"), ["LOGICALREF", "CODE"]),
         (_options.FirmTable("INVDEF"), ["NR"]),
         (_options.PeriodTable("CLFLINE"), ["LOGICALREF", "CLIENTREF", "TRCODE", "DEBIT", "CREDIT"]),
@@ -80,6 +90,7 @@ public sealed class InstallationDiagnostics
         }
 
         bulgular.Add(await CheckOrderSinkAsync(ct));
+        bulgular.Add(await CheckCatalogSinkAsync(ct));
 
         return Sonuc(bulgular);
     }
@@ -235,5 +246,34 @@ public sealed class InstallationDiagnostics
                 "object-service",
                 "FAIL",
                 $"Logo Object Service adresine ({_options.ObjectServiceUrl}) ulaşılamadı.");
+    }
+
+    /// <summary>
+    /// Katalog yazimi acik mi ve ucuna ulasilabiliyor mu?
+    ///
+    /// Kapali olmasi HATA degildir - yalnizca okuyan, katalogunu Logo'da yoneten
+    /// bir kurulum mesrudur. Ama sessiz de gecilmez: "portalden urun ekledim,
+    /// Logo'da gorunmuyor" sikayetinin cevabi bu satirdir.
+    /// </summary>
+    private async Task<DiagnosticFinding> CheckCatalogSinkAsync(CancellationToken ct)
+    {
+        if (!_options.CanWriteCatalog)
+        {
+            return new DiagnosticFinding(
+                "catalog-service",
+                "WARN",
+                "Bridge:ObjectServiceItemUrl / ObjectServicePriceUrl tanımlı değil; " +
+                "katalog yazımı KAPALIDIR. Portalden açılan ürün ve değiştirilen fiyat " +
+                "Logo'ya geçmez, kalıcı hata alır.");
+        }
+
+        var ulasildi = await _catalogSink.ProbeAsync(ct);
+
+        return ulasildi
+            ? new DiagnosticFinding("catalog-service", "PASS", "Katalog yazım ucu erişilebilir.")
+            : new DiagnosticFinding(
+                "catalog-service",
+                "FAIL",
+                $"Katalog yazım adresine ({_options.ObjectServiceItemUrl}) ulaşılamadı.");
     }
 }

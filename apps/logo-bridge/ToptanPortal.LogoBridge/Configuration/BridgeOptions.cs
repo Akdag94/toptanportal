@@ -47,6 +47,19 @@ public sealed record BridgeOptions
     public string? ObjectServiceUrl { get; init; }
 
     /// <summary>
+    /// Stok karti yazim adresi. Portalde acilan/duzenlenen urun buraya gider.
+    ///
+    /// Siparis adresinden AYRI tutulur: Logo tarafinda siparis fisi ile stok
+    /// karti farkli nesnelerdir ve cogu kurulumda farkli uclardan yazilir.
+    /// Tek adres varsaymak, katalog yazimini calisiyor gibi gosterip siparis
+    /// ucuna kart gondermeye calisirdi.
+    /// </summary>
+    public string? ObjectServiceItemUrl { get; init; }
+
+    /// <summary>Fiyat karti yazim adresi.</summary>
+    public string? ObjectServicePriceUrl { get; init; }
+
+    /// <summary>
     /// Object Service kimlik anahtari. Servis kimlik dogrulamasi istiyorsa
     /// doldurulur; sirket ici agda "zaten kapali ag" varsayimi, ayni aga giren
     /// her cihazi Logo'ya siparis yazabilir hale getirir.
@@ -149,21 +162,49 @@ public sealed record BridgeOptions
            bir adres dogrulamadan gecer, sonra `HttpClient` tarafindan
            reddedilir; yani hata acilista degil, ilk siparis gonderiminde
            ortaya cikar. */
-        if (!string.IsNullOrWhiteSpace(ObjectServiceUrl))
+        foreach (var (ad, adres) in new[]
+                 {
+                     ("Bridge:ObjectServiceUrl", ObjectServiceUrl),
+                     ("Bridge:ObjectServiceItemUrl", ObjectServiceItemUrl),
+                     ("Bridge:ObjectServicePriceUrl", ObjectServicePriceUrl),
+                 })
         {
-            var gecerli = Uri.TryCreate(ObjectServiceUrl, UriKind.Absolute, out var adres)
-                          && (adres.Scheme == Uri.UriSchemeHttp || adres.Scheme == Uri.UriSchemeHttps);
+            if (string.IsNullOrWhiteSpace(adres))
+            {
+                continue;
+            }
+
+            var gecerli = Uri.TryCreate(adres, UriKind.Absolute, out var ayristirilan)
+                          && (ayristirilan.Scheme == Uri.UriSchemeHttp
+                              || ayristirilan.Scheme == Uri.UriSchemeHttps);
 
             if (!gecerli)
             {
-                yield return
-                    "Bridge:ObjectServiceUrl http:// veya https:// ile başlayan mutlak bir adres olmalıdır.";
+                yield return $"{ad} http:// veya https:// ile başlayan mutlak bir adres olmalıdır.";
             }
+        }
+
+        /* KATALOG YAZIMI YA TAMDIR YA DA YOKTUR.
+           Yalnizca kart adresi tanimliysa portal urunu Logo'ya yazar ama fiyati
+           yazamaz; kullanici urunu acar, fiyatini girer ve fiyatin gitmedigini
+           ancak ilk siparis yanlis tutarla dustugunde ogrenir. Yarim
+           yapilandirma, hic yapilandirmamaktan tehlikelidir. */
+        if (string.IsNullOrWhiteSpace(ObjectServiceItemUrl)
+            != string.IsNullOrWhiteSpace(ObjectServicePriceUrl))
+        {
+            yield return
+                "Bridge:ObjectServiceItemUrl ve Bridge:ObjectServicePriceUrl birlikte tanımlanmalıdır; " +
+                "yalnızca biri tanımlıyken katalog yazımı yarım çalışır.";
         }
     }
 
     /// <summary>Siparis yazimi yapilandirilmis mi?</summary>
     public bool CanWriteOrders => !string.IsNullOrWhiteSpace(ObjectServiceUrl);
+
+    /// <summary>Katalog (kart + fiyat) yazimi yapilandirilmis mi?</summary>
+    public bool CanWriteCatalog =>
+        !string.IsNullOrWhiteSpace(ObjectServiceItemUrl)
+        && !string.IsNullOrWhiteSpace(ObjectServicePriceUrl);
 
     /// <summary>Logo firma bazli tablo adi: <c>LG_001_ITEMS</c>.</summary>
     public string FirmTable(string name) => $"LG_{FirmNumber:D3}_{name}";

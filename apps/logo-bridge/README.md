@@ -22,8 +22,24 @@
 | `GET /bridge/v1/prices` | Satış fiyatı fark akışı |
 | `GET /bridge/v1/accounts` | Cari hareket fark akışı (ileriye akar) |
 | `POST /bridge/v1/orders` | Sipariş yazımı — `portalOrderId` üzerinden idempotent |
+| `POST /bridge/v1/items` | Stok kartı yazımı — stok kodu üzerinden idempotent |
+| `POST /bridge/v1/prices` | Fiyat kartı yazımı — kart + liste + birim üzerinden idempotent |
 
-Hata sözleşmesi: **422 kalıcıdır** (portal olayı ölü işaretler, operatör müdahale eder), **5xx geçicidir** (portal tekrar dener). Bu ayrım yanlış verilirse ya kuyruk tıkanır ya sipariş kaybolur.
+Hata sözleşmesi: **422 kalıcıdır** (portal olayı ölü işaretler, operatör müdahale eder), **5xx geçicidir** (portal tekrar dener). Bu ayrım yanlış verilirse ya kuyruk tıkanır ya sipariş kaybolur. Üç yazma ucu **aynı** sınıflandırmayı kullanır; farklılaşsalardı aynı ağ hatası bir yolda kuyrukta beklerken ötekinde ölü işaretlenirdi.
+
+## Katalog yazımı (portal → Logo)
+
+Portalde açılan ürün ve değiştirilen fiyat bu uçlardan Logo'ya geçer. Yazmanın kendisi yine Logo'nun servis katmanına devredilir (`ILogoCatalogSink`) — `ITEMS` ve `PRCLIST` tablolarına doğrudan INSERT yapılmaz. Logo stok kartı tek satır değildir; birim seti, çevrimler, muhasebe bağlantısı ve KDV tanımı ayrı tablolardadır ve aralarındaki tutarlılığı Logo'nun kendi mantığı kurar.
+
+Köprü yazmadan **önce** üç şeye karar verir. Bunları Object Service'e bırakmak mümkündü; bırakmamanın sebebi **hata mesajıdır** — servis reddi çoğu kurulumda "işlem başarısız" dizesidir ve operatör neyi düzelteceğini bilemez.
+
+- **Kod Logo'da var mı?** Cevap `created` bayrağına gider ve portal "yeni kart açıldı" ile "var olan kart güncellendi" ayrımını denetim kaydına yazar.
+- **Kod başka türde bir kartta mı kullanılıyor?** Ticari mal, karma koli, depozitolu ve üretim kartlarının (`ITEMS.CARDTYPE` 1, 2, 3, 10–13) dışındaki bir karta yazmak, muhasebenin başka amaçla açtığı kartı portal ürününe çevirirdi — geçmiş hareketleri olduğu yerde kalarak. `DUPLICATE_ITEM_CODE` döner ve kalıcıdır.
+- **Birimler Logo'da tanımlı mı?** Tanımsız birimle açılan kart sipariş fişinde kullanılamaz ve bu, kart açıldıktan günler sonra ilk siparişte anlaşılır. `UNKNOWN_UNIT` eksik birimi **adıyla** söyler.
+
+Fiyat yazımında ayrıca kart varlığı aranır: fiyat, kartından önce yazılamaz (`UNKNOWN_PRODUCT`).
+
+`Bridge:ObjectServiceItemUrl` ve `Bridge:ObjectServicePriceUrl` **birlikte** tanımlanır; yalnızca biri verilirse köprü **açılmaz**. Yarım yapılandırmada portal ürünü Logo'ya yazar ama fiyatını yazamaz — kullanıcı ürünü açar, fiyatını girer ve fiyatın gitmediğini ancak ilk sipariş yanlış tutarla düştüğünde öğrenir.
 
 ## Akış tasarımı
 
@@ -71,7 +87,7 @@ dotnet run --project ToptanPortal.LogoBridge
 
 `sql/portal_order_map.sql` betiği Logo veritabanında bir kez çalıştırılır.
 
-`appsettings.json` içinde doldurulması zorunlu alanlar: `Bridge:ConnectionString`, `Bridge:FirmNumber`, `Bridge:PeriodNumber`, `Bridge:AllowedClientThumbprints`, `Kestrel` sunucu sertifikası. `Bridge:ObjectServiceUrl` boş bırakılırsa **sipariş yazımı kapalıdır** — okuma akışları çalışır, gelen siparişler kalıcı hata alır ve bu durum hem açılış günlüğünde hem `/diagnostics` çıktısında yazar. Eksik veya geçersiz bir değerle servis **açılmaz** — yanlış firma numarasıyla ayağa kalkan bir köprü, başka bir şirketin stok verisini portale taşır.
+`appsettings.json` içinde doldurulması zorunlu alanlar: `Bridge:ConnectionString`, `Bridge:FirmNumber`, `Bridge:PeriodNumber`, `Bridge:AllowedClientThumbprints`, `Kestrel` sunucu sertifikası. `Bridge:ObjectServiceUrl` boş bırakılırsa **sipariş yazımı kapalıdır**; `Bridge:ObjectServiceItemUrl` / `ObjectServicePriceUrl` boş bırakılırsa **katalog yazımı kapalıdır** — okuma akışları çalışır, gelen istekler kalıcı hata alır ve bu durum hem açılış günlüğünde hem `/diagnostics` çıktısında yazar. Kapalı olmak meşrudur: kataloğunu Logo'da yöneten bir kurulum yalnızca okur. Sessiz geçilmemesinin sebebi, "portalden ürün ekledim, Logo'da görünmüyor" şikâyetinin cevabının o satır olmasıdır. Eksik veya geçersiz bir değerle servis **açılmaz** — yanlış firma numarasıyla ayağa kalkan bir köprü, başka bir şirketin stok verisini portale taşır.
 
 `Bridge:PeriodNumber` **yıl sonu dönem devrinde değişir**; devir sonrası güncellenmezse köprü kapanan dönemi okumaya devam eder ve yeni siparişleri göremez.
 

@@ -37,9 +37,14 @@ builder.Services.AddHttpClient<ILogoOrderSink, ObjectServiceOrderSink>(client =>
        sekilde uzun bir pay birakilir. */
     client.Timeout = TimeSpan.FromSeconds(options.ObjectServiceTimeoutSeconds);
 });
+builder.Services.AddHttpClient<ILogoCatalogSink, ObjectServiceCatalogSink>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(options.ObjectServiceTimeoutSeconds);
+});
 /* OrderWriter ve tanilama SCOPED'dir: tipli HttpClient'i tasirlar ve singleton
    bir sinifin icinde tutulan HttpClient, DNS degisikliklerini gormez. */
 builder.Services.AddScoped<OrderWriter>();
+builder.Services.AddScoped<CatalogWriter>();
 builder.Services.AddScoped<InstallationDiagnostics>();
 
 /* ES ZAMANLILIK SINIRI.
@@ -187,11 +192,13 @@ app.MapBridgeEndpoints();
 
 app.Logger.LogInformation(
     "Köprü açıldı. Firma: {Firm}, dönem: {Period}, izinli sertifika: {Certificates}, " +
-        "sipariş yazımı: {OrderWrite}. Kurulum doğrulaması için: GET /bridge/v1/diagnostics",
+        "sipariş yazımı: {OrderWrite}, katalog yazımı: {CatalogWrite}. " +
+        "Kurulum doğrulaması için: GET /bridge/v1/diagnostics",
     options.FirmNumber,
     options.PeriodNumber,
     options.AllowedClientThumbprints.Length,
-    options.CanWriteOrders ? "açık" : "KAPALI");
+    options.CanWriteOrders ? "açık" : "KAPALI",
+    options.CanWriteCatalog ? "açık" : "KAPALI");
 
 app.Run();
 
