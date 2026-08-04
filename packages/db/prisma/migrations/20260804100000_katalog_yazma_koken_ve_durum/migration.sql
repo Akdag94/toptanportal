@@ -79,12 +79,25 @@ CREATE TRIGGER trg_products_code_immutable
     EXECUTE FUNCTION prevent_product_code_change();
 
 -- ---------------------------------------------------------------------------
--- YAYINDAKI KART, LOGO'YA YAZILAMAMIS OLAMAZ.
+-- LOGO'DA KARSILIGI OLMAYAN KART YAYINA ALINAMAZ.
 --
--- Reddedilmis bir kart Logo'da yoktur. Katalogda yayinda birakmak, bayinin
--- siparis verebilecegi ama Logo'ya hicbir zaman dusemeyecek bir urun
--- gostermektir; siparis kuyruga girer, "bulunmayan stok karti" diye olu
--- isaretlenir ve musteri bunu ancak mal gelmeyince ogrenir.
+-- Portalde acilmis bir kart, ilk basarili yazima kadar Logo'da YOKTUR.
+-- Katalogda yayinda birakmak, bayinin siparis verebilecegi ama Logo'ya hicbir
+-- zaman dusemeyecek bir urun gostermektir; siparis kuyruga girer, "bulunmayan
+-- stok karti" diye olu isaretlenir ve musteri bunu ancak mal gelmeyince
+-- ogrenir.
+--
+-- Kosul YAZMA DURUMUNA degil, LOGO REFERANSINA baglanir. Yazma durumu gecicidir:
+-- Logo'da coktan var olan bir kartin ad guncellemesi reddedildiginde durum
+-- FAILED olur - ama kart yerinde durmaktadir ve satisi surmelidir. Kisiti
+-- duruma baglamak, calisan bir urunu katalogdan dusurmeye zorlardi.
+--
+-- Logo kokenli kartlarda referans senkron tarafindan doldurulmamis olabilir;
+-- onlarin Logo'da var oldugu zaten kokeninden bilinir.
 -- ---------------------------------------------------------------------------
 ALTER TABLE "products" ADD CONSTRAINT "chk_products_published_requires_logo"
-    CHECK ("status" <> 'PUBLISHED' OR "logoWriteState" <> 'FAILED');
+    CHECK (
+        "status" <> 'PUBLISHED'
+        OR "origin" = 'LOGO'
+        OR "logoItemRef" IS NOT NULL
+    );

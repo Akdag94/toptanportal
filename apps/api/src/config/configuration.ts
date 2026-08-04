@@ -68,6 +68,15 @@ const envSchema = z
     JOB_PRICE_SYNC_SECONDS: z.coerce.number().int().min(60).max(86400).default(1800),
     JOB_ACCOUNT_SYNC_SECONDS: z.coerce.number().int().min(60).max(86400).default(900),
     JOB_ORDER_DISPATCH_SECONDS: z.coerce.number().int().min(10).max(600).default(30),
+    /**
+     * Portalde acilan kartin ve degistirilen fiyatin Logo'ya yazilma turu.
+     *
+     * Siparisten (30 sn) belirgin sekilde SEYREK: katalog yazimi bekleyebilir.
+     * Ama cok seyrek de olmamali - kullanici urunu actiktan sonra "Logo'ya
+     * yazildi" isaretini makul bir surede gormeli, aksi halde ekrani yenileyip
+     * durur ya da karti ikinci kez acmaya calisir.
+     */
+    JOB_CATALOG_WRITE_SECONDS: z.coerce.number().int().min(15).max(3600).default(60),
     JOB_BRIDGE_PROBE_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
 
     /**

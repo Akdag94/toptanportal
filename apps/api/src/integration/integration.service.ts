@@ -24,6 +24,7 @@ import {
 import { PrismaService } from '../common/prisma/prisma.service';
 import { AccountSyncService } from './account-sync.service';
 import { BridgeClient } from './bridge.client';
+import { CatalogDispatchService } from './catalog-dispatch.service';
 import { OrderDispatchService } from './order-dispatch.service';
 import { PriceSyncService } from './price-sync.service';
 import { StockSyncService } from './stock-sync.service';
@@ -41,6 +42,7 @@ export class IntegrationService {
     private readonly priceSync: PriceSyncService,
     private readonly accountSync: AccountSyncService,
     private readonly dispatch: OrderDispatchService,
+    private readonly catalogDispatch: CatalogDispatchService,
   ) {}
 
   /**
@@ -140,24 +142,47 @@ export class IntegrationService {
       take: limit,
     });
 
-    /* Siparis numaralari tek sorguda cekilir: olay basina sorgu, 50 satirlik
-       bir ekrani 50 gidis-donuse cikarir. */
-    const siparisKimlikleri = olaylar
-      .filter((olay) => olay.aggregateType === 'Order')
-      .map((olay) => olay.aggregateId);
+    /* Etiketler tur basina TEK sorguda cekilir: olay basina sorgu, 50 satirlik
+       bir ekrani 50 gidis-donuse cikarir.
 
-    const siparisler = await this.prisma.order.findMany({
-      where: { id: { in: siparisKimlikleri } },
-      select: { id: true, orderNumber: true },
-    });
+       Etiket, operatorun olayi tanidigi tek seydir. Kimliksiz bir satir
+       ("d7f1a2…") karsisinda yapilabilecek tek sey, olayin ne oldugunu
+       veritabanindan elle aramaktir. */
+    const kimlikler = (tur: string) =>
+      olaylar.filter((olay) => olay.aggregateType === tur).map((olay) => olay.aggregateId);
 
-    const numaraHaritasi = new Map(siparisler.map((s) => [s.id, s.orderNumber]));
+    const [siparisler, urunler, fiyatlar] = await Promise.all([
+      this.prisma.order.findMany({
+        where: { id: { in: kimlikler('Order') } },
+        select: { id: true, orderNumber: true },
+      }),
+      this.prisma.product.findMany({
+        where: { id: { in: kimlikler('Product') } },
+        select: { id: true, logoItemCode: true, name: true },
+      }),
+      this.prisma.priceListItem.findMany({
+        where: { id: { in: kimlikler('PriceListItem') } },
+        select: {
+          id: true,
+          product: { select: { logoItemCode: true } },
+          priceList: { select: { logoPriceListNo: true } },
+        },
+      }),
+    ]);
+
+    const etiketler = new Map<string, string>([
+      ...siparisler.map((s) => [s.id, s.orderNumber] as const),
+      ...urunler.map((u) => [u.id, `${u.logoItemCode} — ${u.name}`] as const),
+      ...fiyatlar.map(
+        (f) => [f.id, `${f.product.logoItemCode} / liste ${f.priceList.logoPriceListNo}`] as const,
+      ),
+    ]);
 
     return olaylar.map((olay) => ({
       id: olay.id.toString(),
       eventType: olay.eventType,
       aggregateId: olay.aggregateId,
-      label: numaraHaritasi.get(olay.aggregateId) ?? null,
+      label: etiketler.get(olay.aggregateId) ?? null,
       attempts: olay.attempts,
       lastError: olay.lastError,
       createdAt: olay.createdAt.toISOString(),
@@ -197,6 +222,16 @@ export class IntegrationService {
         const islenen = await this.dispatch.run(tenantId, workerId);
         return {
           channel: SyncChannelContract.ORDER,
+          itemCount: islenen,
+          durationMs: 0,
+          hasMore: false,
+          cursor: null,
+        };
+      }
+      case SyncChannelContract.CATALOG_WRITE: {
+        const islenen = await this.catalogDispatch.run(tenantId, workerId);
+        return {
+          channel: SyncChannelContract.CATALOG_WRITE,
           itemCount: islenen,
           durationMs: 0,
           hasMore: false,

@@ -95,6 +95,15 @@ export class MaintenanceService implements OnModuleInit, OnModuleDestroy {
         run: () => this.dispatchOrders(),
       },
       {
+        name: 'katalog-yazimi',
+        intervalSeconds: app.JOB_CATALOG_WRITE_SECONDS,
+        /* Siparis aktarimindan AYRI bir gorevdir. Ikisini birlestirmek, bir
+           fiyat degisikliginin arkasinda bekleyen siparisi geciktirirdi -
+           musteri fiyat degisikligini beklemez, siparisinin gitmesini bekler. */
+        lockTtlSeconds: 600,
+        run: () => this.syncChannel(SyncChannelContract.CATALOG_WRITE),
+      },
+      {
         name: 'stok-senkronu',
         intervalSeconds: app.JOB_STOCK_SYNC_SECONDS,
         lockTtlSeconds: 600,
