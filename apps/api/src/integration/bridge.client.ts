@@ -26,13 +26,19 @@ import {
   accountDeltaPageSchema,
   bridgeErrorSchema,
   bridgeHealthSchema,
+  bridgeItemResultSchema,
   bridgeOrderResultSchema,
+  bridgePriceResultSchema,
   priceDeltaPageSchema,
   stockDeltaPageSchema,
   type AccountDeltaPage,
   type BridgeHealth,
+  type BridgeItemPush,
+  type BridgeItemResult,
   type BridgeOrderPush,
   type BridgeOrderResult,
+  type BridgePricePush,
+  type BridgePriceResult,
   type PriceDeltaPage,
   type StockDeltaPage,
 } from '@toptanportal/contracts';
@@ -308,6 +314,43 @@ export class BridgeClient {
       schema: bridgeOrderResultSchema,
       /* Siparis yazimi Logo tarafinda fis olusturur; okuma cagrilarindan
          belirgin sekilde uzun surer. */
+      timeoutMs: Math.max(this.config.LOGO_BRIDGE_TIMEOUT_MS, 15000),
+    });
+  }
+
+  /**
+   * Stok kartini Logo'ya yazar. Idempotency anahtari STOK KODUDUR: ayni kodla
+   * ikinci cagri yeni kart acmaz, var olani gunceller.
+   *
+   * Bu, siparisteki `portalOrderId` anahtarindan farkli bir gerekceyle
+   * dogrudur: siparis her cagrida yeni bir belge olabilirdi, kart olamaz -
+   * kod zaten Logo'nun birincil anahtaridir. Ag zaman asiminda tekrar denemek
+   * bu yuzden guvenlidir.
+   */
+  pushItem(item: BridgeItemPush): Promise<BridgeItemResult> {
+    return this.call<BridgeItemResult>({
+      method: 'POST',
+      path: '/bridge/v1/items',
+      body: item,
+      schema: bridgeItemResultSchema,
+      timeoutMs: Math.max(this.config.LOGO_BRIDGE_TIMEOUT_MS, 15000),
+    });
+  }
+
+  /**
+   * Fiyati Logo'ya yazar. Anahtar kart + liste + birim bilesimidir.
+   *
+   * Kart yazimindan AYRI bir cagridir ve sirasi onemlidir: kart once yazilir.
+   * Ikisini tek cagriya birlestirmek, fiyat reddedildiginde kartin da
+   * yazilmamis sayilmasina yol acardi - oysa kart Logo'da acilmistir ve
+   * portalin onu tekrar acmaya calismasi gereksizdir.
+   */
+  pushPrice(price: BridgePricePush): Promise<BridgePriceResult> {
+    return this.call<BridgePriceResult>({
+      method: 'POST',
+      path: '/bridge/v1/prices',
+      body: price,
+      schema: bridgePriceResultSchema,
       timeoutMs: Math.max(this.config.LOGO_BRIDGE_TIMEOUT_MS, 15000),
     });
   }
