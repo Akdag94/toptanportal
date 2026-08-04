@@ -64,6 +64,17 @@ export const Permission = {
   ADMIN_SETTINGS_MANAGE: 'admin:settings:manage',
   INTEGRATION_MANAGE: 'integration:manage',
   PRICE_LIST_MANAGE: 'price-list:manage',
+  /**
+   * Fiyati DEGISTIRME - ve degisikligi Logo'ya yazma.
+   *
+   * PRICE_LIST_MANAGE'den ayri tutulur cunku o yetki listeyi GORMEYI acar
+   * ("bu bayi bu urunu kactan aliyor" sorusu her gun sorulur ve cevabi
+   * gormek zararsizdir). Bu yetki ise portalden yazilan bir fiyatin Logo'ya
+   * gecmesini, dolayisiyla kesilecek faturayi degistirir. Var olan bir
+   * yetkinin anlamini genisletmek, o yetkiyi tasiyan herkese haberi olmadan
+   * yeni bir guc vermektir.
+   */
+  PRICE_CHANGE: 'price:change',
   AUDIT_LOG_VIEW: 'audit:view',
   IP_WHITELIST_MANAGE: 'ip-whitelist:manage',
   /**
@@ -123,6 +134,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     Permission.ADMIN_SETTINGS_MANAGE,
     Permission.INTEGRATION_MANAGE,
     Permission.PRICE_LIST_MANAGE,
+    Permission.PRICE_CHANGE,
     Permission.AUDIT_LOG_VIEW,
     Permission.IP_WHITELIST_MANAGE,
     Permission.NOTIFICATION_LOG_VIEW,

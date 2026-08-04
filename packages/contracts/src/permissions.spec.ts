@@ -107,6 +107,33 @@ describe('Rol sınırları', () => {
     expect(admins).toEqual([UserRole.SUPER_ADMIN]);
   });
 
+  it('fiyatı Logo\'ya yazma yetkisi yalnızca yöneticidedir', () => {
+    const allowed = Object.values(UserRole).filter((role) =>
+      roleHasPermission(role, Permission.PRICE_CHANGE),
+    );
+
+    expect(allowed).toEqual([UserRole.SUPER_ADMIN]);
+  });
+
+  it('fiyatı değiştirebilen rol, fiyatı görebilir de', () => {
+    for (const role of Object.values(UserRole)) {
+      if (!roleHasPermission(role, Permission.PRICE_CHANGE)) continue;
+
+      expect(
+        roleHasPermission(role, Permission.PRICE_VIEW),
+        `${role} fiyat değiştirebiliyor ama fiyat göremiyor`,
+      ).toBe(true);
+    }
+  });
+
+  it('katalog kartı açma yetkisi yalnızca yöneticidedir', () => {
+    const allowed = Object.values(UserRole).filter((role) =>
+      roleHasPermission(role, Permission.CATALOG_MANAGE),
+    );
+
+    expect(allowed).toEqual([UserRole.SUPER_ADMIN]);
+  });
+
   it('işletme ana yetkilisi alt kullanıcı limitlerini tanımlayabilir', () => {
     expect(roleHasPermission(UserRole.BUSINESS_OWNER, Permission.USER_LIMIT_MANAGE)).toBe(true);
     expect(roleHasPermission(UserRole.BUSINESS_STAFF, Permission.USER_LIMIT_MANAGE)).toBe(false);

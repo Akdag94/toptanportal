@@ -190,6 +190,88 @@ export const bridgeOrderResultSchema = z.object({
 
 export type BridgeOrderResult = z.infer<typeof bridgeOrderResultSchema>;
 
+// ---------------------------------------------------------------------------
+// Katalog yazimi (portal -> Logo)
+//
+// Okuma akislarinin tersi yon. Buradaki her cagri Logo'da KALICI bir kayit
+// birakir, bu yuzden ikisi de idempotenttir: anahtar stok kodudur (kart) ve
+// stok kodu + liste + birim + kademe bilesimidir (fiyat). Ag zaman asiminda
+// "yazdim mi?" sorusu cevapsizdir; tekrar denemenin guvenli olmasi koprunun
+// bu anahtarlari tanimasina baglidir.
+// ---------------------------------------------------------------------------
+
+export const bridgeItemUnitSchema = z.object({
+  code: z.string(),
+  name: z.string(),
+  /** 1 bu birim = kac ana birim. Ana birimde 1'dir. */
+  conversionFactor: z.number().positive(),
+  isBaseUnit: z.boolean(),
+});
+
+export type BridgeItemUnit = z.infer<typeof bridgeItemUnitSchema>;
+
+/**
+ * Stok karti yazimi. Kart YOKSA acilir, VARSA guncellenir.
+ *
+ * Gonderilen alanlar bilincli olarak dardir: Logo stok kartinda yuzlerce alan
+ * bulunur ve portalin bilmedigi bir alani "varsayilanla" yazmak, muhasebecinin
+ * elle girdigi degeri sessizce ezer. Portal yalnizca kendi dogurdugu bilgiyi
+ * yazar; geri kalanina Logo'nun varsayilanlari karar verir.
+ */
+export const bridgeItemPushSchema = z.object({
+  /** Idempotency anahtari ve Logo'daki birincil anahtar. */
+  logoItemCode: z.string().min(1),
+  name: z.string().min(1),
+  brand: z.string().nullable(),
+  vatRate: z.number().min(0).max(100),
+  units: z.array(bridgeItemUnitSchema).min(1),
+  /** Kart Logo'da satisa kapali acilsin mi (portalde taslak ise). */
+  isActive: z.boolean(),
+});
+
+export type BridgeItemPush = z.infer<typeof bridgeItemPushSchema>;
+
+export const bridgeItemResultSchema = z.object({
+  logoItemCode: z.string(),
+  logoItemRef: z.number().int(),
+  /** Kart bu cagrida mi acildi, yoksa var olan mi guncellendi. */
+  created: z.boolean(),
+  writtenAt: z.string(),
+});
+
+export type BridgeItemResult = z.infer<typeof bridgeItemResultSchema>;
+
+/**
+ * Fiyat karti yazimi.
+ *
+ * `unitCode` ana birimi gosteriyorsa Logo tarafinda birim alani bos yazilir -
+ * ayni fiyati hem ana birim satirinda hem birim bazli satirda tanimlamak, iki
+ * kaynakli bir fiyat uretir ve hangisinin kazandigi Logo surumune gore degisir.
+ */
+export const bridgePricePushSchema = z.object({
+  logoItemCode: z.string().min(1),
+  /** Logo fiyat karti liste numarasi. */
+  priceListCode: z.string().min(1),
+  unitCode: z.string().nullable(),
+  minQuantity: z.number().nonnegative(),
+  price: z.number().nonnegative(),
+  currency: z.string().length(3),
+  validFrom: z.string().nullable(),
+  validTo: z.string().nullable(),
+});
+
+export type BridgePricePush = z.infer<typeof bridgePricePushSchema>;
+
+export const bridgePriceResultSchema = z.object({
+  logoItemCode: z.string(),
+  priceListCode: z.string(),
+  logoPriceRef: z.number().int(),
+  created: z.boolean(),
+  writtenAt: z.string(),
+});
+
+export type BridgePriceResult = z.infer<typeof bridgePriceResultSchema>;
+
 /**
  * Koprunun REDDETME sebebi. Ag hatasindan ayrilir: ag hatasi tekrar denenir,
  * is kurali hatasi tekrar denendiginde ayni sonucu verir ve kuyrugu tikar.
@@ -198,6 +280,16 @@ export const BridgeRejectionReason = {
   UNKNOWN_PRODUCT: 'UNKNOWN_PRODUCT',
   UNKNOWN_COMPANY: 'UNKNOWN_COMPANY',
   UNKNOWN_WAREHOUSE: 'UNKNOWN_WAREHOUSE',
+  UNKNOWN_PRICE_LIST: 'UNKNOWN_PRICE_LIST',
+  UNKNOWN_UNIT: 'UNKNOWN_UNIT',
+  /**
+   * Stok kodu Logo'da BASKA bir kartta kullaniliyor.
+   *
+   * Kalici hatadir ve tekrar denemek ayni sonucu verir; portaldeki kartin kodu
+   * degistirilemedigi icin cozum, kartin kapatilip dogru kodla yeniden
+   * acilmasidir - operatorun karari.
+   */
+  DUPLICATE_ITEM_CODE: 'DUPLICATE_ITEM_CODE',
   PERIOD_CLOSED: 'PERIOD_CLOSED',
   VALIDATION_FAILED: 'VALIDATION_FAILED',
 } as const;
@@ -209,6 +301,9 @@ export const BRIDGE_REJECTION_LABELS: Record<BridgeRejectionReason, string> = {
   UNKNOWN_PRODUCT: 'Logo’da bulunmayan stok kartı',
   UNKNOWN_COMPANY: 'Logo’da bulunmayan cari hesap',
   UNKNOWN_WAREHOUSE: 'Logo’da bulunmayan ambar',
+  UNKNOWN_PRICE_LIST: 'Logo’da bulunmayan fiyat listesi',
+  UNKNOWN_UNIT: 'Logo’da bulunmayan birim',
+  DUPLICATE_ITEM_CODE: 'Stok kodu Logo’da başka bir kartta kullanılıyor',
   PERIOD_CLOSED: 'Logo dönemi kapalı',
   VALIDATION_FAILED: 'Logo doğrulaması başarısız',
 };
@@ -231,6 +326,15 @@ export const SyncChannel = {
   PRICE: 'PRICE',
   ACCOUNT: 'ACCOUNT',
   ORDER: 'ORDER',
+  /**
+   * Portalde acilan/duzenlenen kart ve fiyatin Logo'ya yazilmasi.
+   *
+   * Siparis kanalindan AYRIDIR ve bu ayrim bilinclidir: katalog yazimi
+   * bekleyebilir, siparis bekleyemez. Ikisini ayni kanala koymak, bir fiyat
+   * degisikliginin arkasinda bekleyen siparisi geciktirir - musteri fiyat
+   * degisikligini beklemez, siparisinin gitmesini bekler.
+   */
+  CATALOG_WRITE: 'CATALOG_WRITE',
 } as const;
 
 export type SyncChannel = (typeof SyncChannel)[keyof typeof SyncChannel];
@@ -240,6 +344,7 @@ export const SYNC_CHANNEL_LABELS: Record<SyncChannel, string> = {
   PRICE: 'Fiyat',
   ACCOUNT: 'Cari Hareket',
   ORDER: 'Sipariş Aktarımı',
+  CATALOG_WRITE: 'Katalog Yazımı',
 };
 
 export const syncChannelStateSchema = z.object({
