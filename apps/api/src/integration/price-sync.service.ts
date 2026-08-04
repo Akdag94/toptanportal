@@ -11,14 +11,21 @@
  *     fiyat setini portale sokar.
  *   * Negatif fiyat yazilmaz. Logo tarafinda veri girisi hatasiyla olusabilir;
  *     portalde negatif birim fiyat, siparis toplamini eksiye cevirir.
+ *   * PORTALDE BEKLEYEN BIR DEGISIKLIGIN USTUNE YAZILMAZ. Portal artik fiyati
+ *     Logo'ya yazabildigi icin, kuyrukta bekleyen bir degisiklik Logo'ya
+ *     ulasmadan once bu akis calisabilir; gelen deger o degisiklikten
+ *     oncesine aittir. Ustune yazmak, kullanicinin biraz once yaptigi
+ *     degisikligi sessizce geri almaktir - kural `catalog-ownership.ts`
+ *     icindedir.
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import { SyncChannel } from '@toptanportal/db';
+import { LogoWriteState, SyncChannel } from '@toptanportal/db';
 import { SyncChannel as SyncChannelContract, type SyncRunResult } from '@toptanportal/contracts';
 
 import { PrismaService } from '../common/prisma/prisma.service';
 import { BridgeClient } from './bridge.client';
+import { logoDegeriYazilabilir } from './catalog-ownership';
 import { SyncCursorService } from './sync-cursor.service';
 
 const AZAMI_SAYFA = 20;
@@ -114,6 +121,7 @@ export class PriceSyncService {
 
     let yazilan = 0;
     let atlanan = 0;
+    let korunan = 0;
 
     for (const item of items) {
       const urun = urunHaritasi.get(item.logoCode);
@@ -151,10 +159,18 @@ export class PriceSyncService {
 
       const mevcut = await this.prisma.priceListItem.findFirst({
         where: { priceListId, productId: urun.id, unitId, minQuantity: 0 },
-        select: { id: true },
+        select: { id: true, logoWriteState: true },
       });
 
       if (mevcut) {
+        if (!logoDegeriYazilabilir(mevcut.logoWriteState)) {
+          /* Portalde bekleyen ya da reddedilmis bir degisiklik var. Gelen
+             deger o degisiklikten oncesine aittir; ustune yazmak kullanicinin
+             degisikligini geri almak, hata isaretini de temizlemek olurdu. */
+          korunan += 1;
+          continue;
+        }
+
         await this.prisma.priceListItem.update({ where: { id: mevcut.id }, data: veri });
       } else {
         await this.prisma.priceListItem.create({
@@ -165,9 +181,11 @@ export class PriceSyncService {
       yazilan += 1;
     }
 
-    if (atlanan > 0) {
+    if (atlanan > 0 || korunan > 0) {
       this.logger.log(
-        `Fiyat senkronu: ${yazilan} satır yazıldı, ${atlanan} satır eşleşmediği veya geçersiz olduğu için atlandı.`,
+        `Fiyat senkronu: ${yazilan} satır yazıldı, ${atlanan} satır eşleşmediği veya ` +
+          `geçersiz olduğu için atlandı, ${korunan} satır portalde bekleyen değişiklik ` +
+          'nedeniyle korundu.',
       );
     }
 
